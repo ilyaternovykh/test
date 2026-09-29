@@ -1,0 +1,37 @@
+# Конфигурация единого сборщика для тестов (docker compose).
+# Для прода: скопируйте на реальные iLO и подключите секреты из .env.
+
+listen:
+  host: 0.0.0.0
+  port: 9127
+  path: /metrics
+  collect_interval: 60        # сек; полный обход парка из 22 серверов
+  http_workers: 8             # параллельность опроса iLO
+
+defaults:
+  username: ${ILO_USER}       # подставляется compose из .env
+  password: ${ILO_PASS}
+  timeout: 15
+  verify_tls: false           # iLO отдаёт самоподписанный сертификат
+  enabled_collectors: [web, redfish]
+  extra_labels:
+    model: dl380p-gen8
+    site: lab
+
+targets:
+  # фейковый iLO из этого же compose — для проверки всего пайплайна
+  - name: mock-dl380g8-01
+    url: https://mock-ilo:8443
+    labels:
+      rack: r01
+    ribcl_enabled: true       # задел IML/IEL (сработает на реальном железе)
+    ribcl_command: "GET IML"
+
+  # ------- сюда добавляются реальные 22 сервера -------
+  # - name: dl380g8-01
+  #   url: https://ilo-dl380g8-01.lab.local
+  #   labels: {rack: r01}
+  # - name: dl380g8-02
+  #   url: https://ilo-dl380g8-02.lab.local
+  #   labels: {rack: r01}
+  # ...
