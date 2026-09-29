@@ -1,515 +1,597 @@
 {
- "uid": "hpe-ilo-park",
- "title": "HPE ProLiant iLO — парк серверов",
- "tags": [
-  "hpe",
-  "ilo",
-  "redfish"
- ],
- "timezone": "browser",
- "schemaVersion": 39,
- "version": 1,
- "refresh": "1min",
- "time": {
-  "from": "now-6h",
-  "to": "now"
- },
- "templating": {
-  "list": [
-   {
-    "name": "target",
-    "type": "query",
-    "datasource": {
-     "type": "prometheus",
-     "uid": "PROM-ILO"
-    },
-    "query": "label_values(ilo_web_up, target)",
-    "includeAll": true,
-    "multi": true,
-    "current": {
-     "text": "All",
-     "value": "$__all"
-    },
-    "refresh": 2
-   }
-  ]
- },
- "panels": [
-  {
-   "type": "row",
-   "title": "Доступность",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 0
-   },
-   "panels": []
+  "uid": "hpe-ilo-park",
+  "title": "HPE ProLiant iLO — парк серверов",
+  "tags": [
+    "hpe",
+    "ilo",
+    "redfish"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "refresh": "1min",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
   },
-  {
-   "id": 1,
-   "type": "stat",
-   "title": "Серверов онлайн (web iLO)",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "expr": "count(ilo_web_up == 1)",
-     "instant": true
-    }
-   ],
-   "gridPos": {
-    "h": 5,
-    "w": 4,
-    "x": 0,
-    "y": 1
-   },
-   "fieldConfig": {
-    "defaults": {
-     "thresholds": {
-      "steps": [
-       {
-        "color": "red",
-        "value": null
-       },
-       {
-        "color": "yellow",
-        "value": 21
-       },
-       {
-        "color": "green",
-        "value": 22
-       }
-      ]
-     }
-    },
-    "overrides": []
-   }
-  },
-  {
-   "id": 2,
-   "type": "stat",
-   "title": "Redfish доступен",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "expr": "count(ilo_redfish_up == 1)",
-     "instant": true
-    }
-   ],
-   "gridPos": {
-    "h": 5,
-    "w": 4,
-    "x": 4,
-    "y": 1
-   },
-   "fieldConfig": {
-    "defaults": {
-     "thresholds": {
-      "steps": [
-       {
-        "color": "red",
-        "value": null
-       },
-       {
-        "color": "green",
-        "value": 1
-       }
-      ]
-     }
-    },
-    "overrides": []
-   }
-  },
-  {
-   "id": 3,
-   "type": "stat",
-   "title": "Выключенные серверы",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "expr": "sum(ilo_redfish_power_state{state=\"On\"} == bool 0)"
-    }
-   ],
-   "gridPos": {
-    "h": 5,
-    "w": 4,
-    "x": 8,
-    "y": 1
-   }
-  },
-  {
-   "id": 4,
-   "type": "timeseries",
-   "title": "Время ответа web iLO, с",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "expr": "ilo_web_response_time_seconds{target=~\"$target\"}",
-     "legendFormat": "{{target}}"
-    }
-   ],
-   "gridPos": {
-    "h": 5,
-    "w": 12,
-    "x": 12,
-    "y": 1
-   }
-  },
-  {
-   "type": "row",
-   "title": "Аппаратное состояние",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 6
-   },
-   "panels": []
-  },
-  {
-   "id": 10,
-   "type": "timeseries",
-   "title": "Температура по датчикам",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "expr": "ilo_redfish_thermal_temperature_celsius{target=~\"$target\"}",
-     "legendFormat": "{{target}} {{name}}"
-    }
-   ],
-   "gridPos": {
-    "h": 8,
-    "w": 12,
-    "x": 0,
-    "y": 7
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "celsius",
-     "min": 0,
-     "custom": {
-      "drawStyle": "line",
-      "showPoints": "never"
-     }
-    },
-    "overrides": []
-   }
-  },
-  {
-   "id": 11,
-   "type": "timeseries",
-   "title": "Вентиляторы, RPM",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "expr": "ilo_redfish_thermal_fan_rpm{target=~\"$target\"}",
-     "legendFormat": "{{target}} {{name}}"
-    }
-   ],
-   "gridPos": {
-    "h": 8,
-    "w": 12,
-    "x": 12,
-    "y": 7
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "rotrpm",
-     "custom": {
-      "drawStyle": "line",
-      "showPoints": "never"
-     }
-    },
-    "overrides": []
-   }
-  },
-  {
-   "id": 12,
-   "type": "timeseries",
-   "title": "Потребление PSU, Вт",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "expr": "ilo_redfish_psu_output_watts{target=~\"$target\"}",
-     "legendFormat": "{{target}} {{name}}"
-    }
-   ],
-   "gridPos": {
-    "h": 8,
-    "w": 12,
-    "x": 0,
-    "y": 15
-   },
-   "fieldConfig": {
-    "defaults": {
-     "unit": "watt",
-     "custom": {
-      "drawStyle": "line",
-      "showPoints": "never"
-     }
-    },
-    "overrides": []
-   }
-  },
-  {
-   "id": 13,
-   "type": "table",
-   "title": "Health ресурсов (0 = проблема)",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
-    {
-     "refId": "A",
-     "expr": "min by (target, resource, id, health, state) (ilo_redfish_status_ok{target=~\"$target\"})",
-     "instant": true
-    }
-   ],
-   "gridPos": {
-    "h": 8,
-    "w": 12,
-    "x": 12,
-    "y": 15
-   },
-   "format": "table",
-   "transformations": [
-    {
-     "id": "organize",
-     "options": {
-      "excludeByName": {
-       "Time": true,
-       "__name__": true
+  "templating": {
+    "list": [
+      {
+        "name": "target",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values(ilo_web_up, target)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2
       }
-     }
-    }
-   ],
-   "fieldConfig": {
-    "defaults": {},
-    "overrides": [
-     {
-      "matcher": {
-       "id": "byName",
-       "options": "Value #A"
-      },
-      "properties": [
-       {
-        "id": "custom.cellOptions",
-        "value": "color-background"
-       },
-       {
-        "id": "thresholds",
-        "value": {
-         "steps": [
-          {
-           "color": "red",
-           "value": null
-          },
-          {
-           "color": "green",
-           "value": 1
-          }
-         ]
-        }
-       }
-      ]
-     }
     ]
-   }
   },
-  {
-   "type": "row",
-   "title": "Журналы IML / IEL",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 23
-   },
-   "panels": []
-  },
-  {
-   "id": 20,
-   "type": "bargauge",
-   "title": "Событий по severity (последняя выборка)",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
+  "panels": [
     {
-     "refId": "A",
-     "expr": "sum by (severity) (ilo_redfish_event_count{target=~\"$target\"})",
-     "legendFormat": "{{severity}}",
-     "instant": true
-    }
-   ],
-   "gridPos": {
-    "h": 7,
-    "w": 8,
-    "x": 0,
-    "y": 24
-   },
-   "displayMode": "gradient",
-   "fieldConfig": {
-    "defaults": {
-     "min": 0
+      "type": "row",
+      "title": "Доступность",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": [],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      }
     },
-    "overrides": []
-   }
-  },
-  {
-   "id": 21,
-   "type": "timeseries",
-   "title": "Записей в логах Redfish",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
     {
-     "refId": "A",
-     "expr": "ilo_redfish_log_entries_total{target=~\"$target\"}",
-     "legendFormat": "{{target}} {{log}}"
-    }
-   ],
-   "gridPos": {
-    "h": 7,
-    "w": 8,
-    "x": 8,
-    "y": 24
-   }
-  },
-  {
-   "id": 22,
-   "type": "stat",
-   "title": "RIBCL IML записей (задел)",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
+      "id": 1,
+      "type": "stat",
+      "title": "Серверов онлайн (web iLO)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(ilo_web_up == 1)",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 21
+              },
+              {
+                "color": "green",
+                "value": 22
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
     {
-     "refId": "A",
-     "expr": "max by (target) (ilo_ribcl_iml_entries{target=~\"$target\"})",
-     "legendFormat": "{{target}}",
-     "instant": true
-    }
-   ],
-   "gridPos": {
-    "h": 7,
-    "w": 8,
-    "x": 16,
-    "y": 24
-   }
-  },
-  {
-   "type": "row",
-   "title": "Служебное: ilo-exporter",
-   "collapsed": false,
-   "gridPos": {
-    "h": 1,
-    "w": 24,
-    "x": 0,
-    "y": 31
-   },
-   "panels": []
-  },
-  {
-   "id": 30,
-   "type": "timeseries",
-   "title": "Длительность цикла сбора, с",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
+      "id": 2,
+      "type": "stat",
+      "title": "Redfish доступен",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(ilo_redfish_up == 1)",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
     {
-     "refId": "A",
-     "expr": "ilo_exporter_last_run_duration_seconds"
-    }
-   ],
-   "gridPos": {
-    "h": 6,
-    "w": 8,
-    "x": 0,
-    "y": 32
-   }
-  },
-  {
-   "id": 31,
-   "type": "timeseries",
-   "title": "Ошибки коллекторов (1 = ошибка)",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
+      "id": 3,
+      "type": "stat",
+      "title": "Выключенные серверы",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(ilo_redfish_power_state{state=\"On\"} == bool 0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "queryType": "range"
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      }
+    },
     {
-     "refId": "A",
-     "expr": "max by (target, collector) ({__name__=~\"ilo_.*_collect_success\", target=~\"$target\"}) == bool 0",
-     "legendFormat": "{{target}}/{{collector}}"
-    }
-   ],
-   "gridPos": {
-    "h": 6,
-    "w": 8,
-    "x": 8,
-    "y": 32
-   }
-  },
-  {
-   "id": 32,
-   "type": "stat",
-   "title": "Серверов в парке",
-   "datasource": {
-    "type": "prometheus",
-    "uid": "PROM-ILO"
-   },
-   "targets": [
+      "id": 4,
+      "type": "timeseries",
+      "title": "Время ответа web iLO, с",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ilo_web_response_time_seconds{target=~\"$target\"}",
+          "legendFormat": "{{target}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "queryType": "range"
+        }
+      ],
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      }
+    },
     {
-     "refId": "A",
-     "expr": "count(ilo_web_up)",
-     "instant": true
+      "type": "row",
+      "title": "Аппаратное состояние",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "panels": [],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Температура по датчикам",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ilo_redfish_thermal_temperature_celsius{target=~\"$target\"}",
+          "legendFormat": "{{target}} {{name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "queryType": "range"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Вентиляторы, RPM",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ilo_redfish_thermal_fan_rpm{target=~\"$target\"}",
+          "legendFormat": "{{target}} {{name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "queryType": "range"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "rotrpm",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Потребление PSU, Вт",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ilo_redfish_psu_output_watts{target=~\"$target\"}",
+          "legendFormat": "{{target}} {{name}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "queryType": "range"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "watt",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "type": "table",
+      "title": "Health ресурсов (0 = проблема)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "min by (target, resource, id, health, state) (ilo_redfish_status_ok{target=~\"$target\"})",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "format": "table",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #A"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": "color-background"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "row",
+      "title": "Журналы IML / IEL",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "panels": [],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      }
+    },
+    {
+      "id": 20,
+      "type": "bargauge",
+      "title": "Событий по severity (последняя выборка)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (severity) (ilo_redfish_event_count{target=~\"$target\"})",
+          "legendFormat": "{{severity}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 24
+      },
+      "displayMode": "gradient",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Записей в логах Redfish",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ilo_redfish_log_entries_total{target=~\"$target\"}",
+          "legendFormat": "{{target}} {{log}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "queryType": "range"
+        }
+      ],
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      }
+    },
+    {
+      "id": 22,
+      "type": "stat",
+      "title": "RIBCL IML записей (задел)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (target) (ilo_ribcl_iml_entries{target=~\"$target\"})",
+          "legendFormat": "{{target}}",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      }
+    },
+    {
+      "type": "row",
+      "title": "Служебное: ilo-exporter",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "panels": [],
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      }
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Длительность цикла сбора, с",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "ilo_exporter_last_run_duration_seconds",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "queryType": "range"
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      }
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Ошибки коллекторов (1 = ошибка)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (target, collector) ({__name__=~\"ilo_.*_collect_success\", target=~\"$target\"}) == bool 0",
+          "legendFormat": "{{target}}/{{collector}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "queryType": "range"
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      }
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "Серверов в парке",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(ilo_web_up)",
+          "instant": true,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 32
+      }
     }
-   ],
-   "gridPos": {
-    "h": 6,
-    "w": 8,
-    "x": 16,
-    "y": 32
-   }
-  }
- ]
+  ]
 }
