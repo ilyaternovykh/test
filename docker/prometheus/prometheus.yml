@@ -17,9 +17,10 @@ scrape_configs:
     static_configs:
       - targets: ["ilo-exporter:9127"]
 
-  # healthcheck самого экспортёра
+  # healthcheck самого экспортёра (metrics-эндпоинт; /healthz — plain text,
+  # он не является валидным exposition format и ломает парсер Prometheus)
   - job_name: ilo-exporter-health
-    metrics_path: /healthz
+    metrics_path: /healthz-metrics
     static_configs:
       - targets: ["ilo-exporter:9127"]
 
