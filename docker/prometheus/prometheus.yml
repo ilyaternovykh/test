@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # единый сборщик всего парка iLO (push-режим внутри экспортёра)
+  - job_name: ilo-exporter
+    scrape_interval: 60s
+    static_configs:
+      - targets: ["ilo-exporter:9127"]
+
+  # healthcheck самого экспортёра
+  - job_name: ilo-exporter-health
+    metrics_path: /healthz
+    static_configs:
+      - targets: ["ilo-exporter:9127"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

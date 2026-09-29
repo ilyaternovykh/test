@@ -1,0 +1,23 @@
+# Шаблон боевой конфигурации: 22 x DL380p Gen8.
+# Пароли НЕ храните в git — используйте ENV overrides или отдельный secrets-файл.
+
+listen:
+  host: 0.0.0.0
+  port: 9127
+  collect_interval: 60
+  http_workers: 8
+
+defaults:
+  username: monitor_ro
+  password: CHANGE_ME
+  timeout: 15
+  verify_tls: false
+  enabled_collectors: [web, redfish]
+  extra_labels:
+    model: dl380p-gen8
+
+targets:
+  - {name: dl380g8-01, url: "https://ilo-dl380g8-01.dc1.local", labels: {rack: r01}}
+  - {name: dl380g8-02, url: "https://ilo-dl380g8-02.dc1.local", labels: {rack: r01}}
+  - {name: dl380g8-03, url: "https://ilo-dl380g8-03.dc1.local", labels: {rack: r02}}
+  # ... до dl380g8-22

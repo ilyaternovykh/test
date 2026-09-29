@@ -1,0 +1,92 @@
+# Тестовый стенд мониторинга парка HPE ProLiant (DL380p Gen8, iLO) в docker compose.
+#
+#   docker compose up -d --build
+#   Grafana:    http://localhost:3000  (admin / admin)
+#   Prometheus: http://localhost:9090
+#   Exporter:   http://localhost:9127/metrics
+#   Mock iLO:   https://localhost:8443 (для тестов без реального железа)
+#
+# Для прода: замените mock-ilo на реальные адреса iLO в targets/targets.yaml
+# (секреты — через .env, см. .env.example).
+services:
+
+  # ---------- фейковый iLO для тестов (не нужен на проде) ----------
+  mock-ilo:
+    image: python:3.12-slim
+    container_name: mock-ilo
+    command: >
+      sh -c "apt-get update -qq && apt-get install -y -qq --no-install-recommends openssl
+      && python3 /app/tests/mock_ilo.py --host 0.0.0.0 --port 8443"
+    volumes:
+      - ./:/app:ro
+    ports:
+      - "8443:8443"
+    restart: unless-stopped
+
+  # ---------- единый сборщик на весь парк ----------
+  ilo-exporter:
+    build:
+      context: .
+      dockerfile: docker/ilo-exporter/Dockerfile
+    container_name: ilo-exporter
+    restart: unless-stopped
+    ports:
+      - "9127:9127"
+    environment:
+      ILO_EXPORTER_CONFIG: /etc/ilo-exporter/targets.yaml
+      ILO_EXPORTER_COLLECT_INTERVAL: "60"
+      # секреты подставляются из .env (ILO_USER / ILO_PASS)
+      ILO_USER: ${ILO_USER:-monitor}
+      ILO_PASS: ${ILO_PASS:-secret}
+    volumes:
+      - ./targets/targets.yaml:/etc/ilo-exporter/targets.yaml:ro
+    depends_on:
+      - mock-ilo
+
+  # ---------- хранение ----------
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=90d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  # ---------- визуализация ----------
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASS:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:

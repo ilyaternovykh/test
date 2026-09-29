@@ -1,0 +1,75 @@
+groups:
+  - name: ilo-availability
+    rules:
+      - alert: ILowebDown
+        expr: min by (target) (ilo_web_up) == 0
+        for: 3m
+        labels: {severity: critical}
+        annotations:
+          summary: "iLO {{ $labels.target }}: web-интерфейс недоступен"
+          description: "Сервер {{ $labels.target }} не отвечает по web iLO > 3 мин. Проверьте питание сервера/сеть iLO."
+
+      - alert: ILOExporterStale
+        expr: time() - ilo_exporter_last_run_timestamp_seconds > 180
+        labels: {severity: warning}
+        annotations:
+          summary: "ilo-exporter не завершает цикл сбора"
+
+  - name: ilo-hardware
+    rules:
+      - alert: RedfishUnavailable
+        expr: min by (target) (ilo_redfish_up) == 0 and max by (target) (ilo_web_up) == 1
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.target }}: iLO жив, но Redfish API не отвечает"
+
+      - alert: ServerPoweredOff
+        expr: max by (target) (ilo_redfish_power_state{state="On"}) == 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.target }}: сервер выключен (PowerState != On)"
+
+      - alert: HighTemperature
+        expr: max by (target, name) (ilo_redfish_thermal_temperature_celsius) > 80
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.target }}: датчик {{ $labels.name }} = {{ $value | printf \"%.0f\" }}°C"
+
+      - alert: FanFailure
+        expr: (min by (target, name) (ilo_redfish_thermal_fan_rpm) < 400) unless on(target,name) (max by (target,name) (ilo_redfish_thermal_fan_lower_critical_rpm) < 400)
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.target }}: вентилятор {{ $labels.name }} остановился?"
+
+      - alert: PSUProblem
+        expr: min by (target, name) (ilo_redfish_psu_present) == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.target }}: {{ $labels.name }} отсутствует/неактивен"
+
+      - alert: PowerRedundancyLost
+        expr: max by (target) (ilo_redfish_power_redundancy_ok) == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.target }}: потеряно резервирование питания"
+
+      - alert: HardwareHealthDegraded
+        expr: min by (target, resource, id) (ilo_redfish_status_ok) == 0
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.target }}: ресурс {{ $labels.resource }}/{{ $labels.id }} не в состоянии OK"
+
+      - alert: NewCriticalLogEvents
+        expr: increase(ilo_redfish_log_entries_total{log=~".*IML.*"}[1h]) > 0
+          or sum by (target) (ilo_redfish_event_count{severity=~"CRITICAL|WARNING"}) > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.target }}: новые критические/предупреждающие события в IML/IEL"
