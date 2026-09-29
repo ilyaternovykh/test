@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field, fields
 from typing import Any
 
@@ -92,6 +93,8 @@ class TargetConfig:
     # --- задел на будущее: IML / IEL через virtual media RIBCL (Gen9+/iLO5) ---
     ribcl_enabled: bool = False
     ribcl_command: str = ""
+    # виртуальный Host для HTTP-запросов (тестовый стенд: один mock на весь парк)
+    host_header: str = ""
 
     @property
     def base_url(self) -> str:
@@ -123,7 +126,26 @@ def _load_yaml(path: str) -> dict:
         data = yaml.safe_load(fh) or {}
     if not isinstance(data, dict):
         raise RuntimeError(f"Config file {path}: ожидался mapping в корне документа")
-    return data
+    return _expand_env(data)
+
+
+def _expand_env(obj: Any) -> Any:
+    """Рекурсивно подставляет ${VAR} / $VAR из окружения в строки конфига.
+
+    Позволяет хранить секреты вне YAML: username: ${ILO_USER}.
+    Если переменная окружения не задана, os.path.expandvars оставляет
+    ссылку как есть — в этом случае она заменяется на пустую строку.
+    """
+    if isinstance(obj, str):
+        expanded = os.path.expandvars(obj)
+        if "$" in expanded:  # осталась неразвёрнутая ссылка ${VAR}/$VAR
+            expanded = re.sub(r"\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*", "", expanded)
+        return expanded
+    if isinstance(obj, list):
+        return [_expand_env(v) for v in obj]
+    if isinstance(obj, dict):
+        return {k: _expand_env(v) for k, v in obj.items()}
+    return obj
 
 
 def _merge_target(raw: dict, defaults: dict, index: int) -> TargetConfig:
@@ -131,7 +153,7 @@ def _merge_target(raw: dict, defaults: dict, index: int) -> TargetConfig:
         k: defaults.get(k, DEFAULTS[k])
         for k in (
             "username", "password", "timeout", "verify_tls",
-            "enabled_collectors", "ribcl_enabled", "ribcl_command",
+            "enabled_collectors", "ribcl_enabled", "ribcl_command", "host_header",
         )
     }
     merged.update({k: v for k, v in raw.items() if k != "labels"})
@@ -159,6 +181,7 @@ def _merge_target(raw: dict, defaults: dict, index: int) -> TargetConfig:
         labels={str(k): str(v) for k, v in labels.items()},
         ribcl_enabled=_as_bool(merged.get("ribcl_enabled", False)),
         ribcl_command=str(merged.get("ribcl_command") or ""),
+        host_header=str(merged.get("host_header") or ""),
     )
 
 

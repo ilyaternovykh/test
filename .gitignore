@@ -1,31 +1,6 @@
-# Python
+# Compiled and build artifacts
 __pycache__/
 *.pyc
-*.pyo
-*.egg-info/
-.eggs/
-
-# Virtual environments
-venv/
-.venv/
-env/
 
 # Environment files
 .env
-.env.local
-.env.*.local
-
-# IDE and Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Logs and temp files
-*.log
-*.tmp

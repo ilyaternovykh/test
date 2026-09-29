@@ -65,7 +65,8 @@ def _collect(target) -> list[Metric]:
     metrics: list[Metric] = []
 
     session = Session(target.base_url, target.username, target.password,
-                      timeout=min(target.timeout, 10), verify=False)
+                      timeout=min(target.timeout, 10), verify=False,
+                      host_header=getattr(target, "host_header", ""))
     up, resp_time, code, location = 0.0, 0.0, "0", ""
     try:
         resp = session.get("/", timeout=min(target.timeout, 10))

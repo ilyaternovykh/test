@@ -44,7 +44,7 @@ class Session:
     """Тонкая обёртка над requests.Session c базовым URL и basic-auth."""
 
     def __init__(self, base_url: str, username: str = "", password: str = "",
-                 timeout: float = 15, verify: bool = False):
+                 timeout: float = 15, verify: bool = False, host_header: str = ""):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = requests.Session()
@@ -58,6 +58,14 @@ class Session:
             "User-Agent": "ilo-exporter/1.0",
             "Accept": "application/json",
         })
+        if host_header:
+            # Виртуальный хост: один эндпоинт может эмулировать несколько iLO
+            # (mock-ilo для теста парка из N серверов).
+            # ВАЖНО: requests/urllib3 игнорируют заголовок "Host" в session.headers
+            # (он управляется на уровне соединения), поэтому подмена Host
+            # выполняется через transport adapter, переписывающий PreparedRequest.
+            self.session.mount("http://", _HostOverrideAdapter(host_header))
+            self.session.mount("https://", _HostOverrideAdapter(host_header))
 
     def get(self, path: str, timeout: Optional[float] = None,
             headers: Optional[dict] = None, stream: bool = False):
@@ -70,6 +78,18 @@ class Session:
         url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
         return self.session.head(url, timeout=timeout or self.timeout,
                                  allow_redirects=allow_redirects)
+
+
+class _HostOverrideAdapter(requests.adapters.HTTPAdapter):
+    """Транспорт, подменяющий HTTP-заголовок Host (виртуальные хосты)."""
+
+    def __init__(self, host_header: str, *args, **kwargs):
+        self._host_header = host_header
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, *args, **kwargs):
+        request.headers["Host"] = self._host_header
+        return super().send(request, *args, **kwargs)
 
 
 @dataclass

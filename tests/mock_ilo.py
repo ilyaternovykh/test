@@ -16,23 +16,51 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import ssl
 import subprocess
 import tempfile
 import time
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
+def _profile() -> dict:
+    """Уникальный «отпечаток» сервера по имени хоста запроса.
+
+    Один mock-контейнер эмулирует весь парк: exporter шлёт HTTP заголовок
+    Host: mock-ilo-N (см. targets.yaml), поэтому каждый target получает
+    свои значения датчиков — как на реальном железе.
+    """
+    host = (getattr(getattr(_handler_local, "srv", None), "host", "") or "mock-dl380g8-01")
+    host = host.partition(":")[0]
+    # стабильный seed между перезапусками mock (hash() с PYTHONHASHSEED случайна)
+    seed = int(zlib.crc32(host.encode())) % 1000
+    m = re.search(r"(\d+)$", host)
+    idx = int(m.group(1)) if m else 1
+    rng = random.Random(seed)
+    model = ("ProLiant DL360p Gen8" if idx % 2 == 0 else "ProLiant DL380p Gen8")
+    return {"idx": idx, "seed": seed, "rng": rng, "host": host, "model": model}
+
+
+class _HandlerLocal:
+    srv = None
+
+
+_handler_local = _HandlerLocal()
+
+
 def thermal():
-    temps = [
-        ("CPU 1", 42), ("CPU 2", 45), ("Board", 28), ("Inlet", 21), ("Outlet", 34),
-    ]
-    fans = [(f"Fan {i}", random.randint(4200, 6100)) for i in range(1, 7)]
+    p = _profile()
+    base_temps = [40 + p["idx"], 43 + p["idx"], 26 + p["idx"] % 5,
+                  20 + p["idx"] % 4, 32 + p["idx"] % 6]
+    temps = list(zip(("CPU 1", "CPU 2", "Board", "Inlet", "Outlet"), base_temps))
+    fans = [(f"Fan {i}", 4200 + (p["seed"] + i * 137) % 1900) for i in range(1, 7)]
     return {
         "@odata.id": "/redfish/v1/Chassis/1/Thermal",
         "Id": "Thermal", "Name": "Thermal",
         "Temperatures": [
-            {"MemberId": str(i), "Name": n, "ReadingCelsius": t + random.randint(-2, 2),
+            {"MemberId": str(i), "Name": n, "ReadingCelsius": t + p["rng"].randint(-2, 2),
              "UpperThresholdCritical": 95, "Status": {"State": "Enabled", "Health": "OK"}}
             for i, (n, t) in enumerate(temps)],
         "Fans": [
@@ -45,15 +73,19 @@ def thermal():
 
 
 def power():
+    p = _profile()
+    load = 150 + (p["seed"] % 9) * 10
     return {
         "@odata.id": "/redfish/v1/Chassis/1/Power",
         "Id": "Power", "Name": "Power",
         "PowerSupplies": [
-            {"MemberId": "0", "Name": "PSU 1", "LineInputVoltage": 228,
-             "PowerCapacityWatts": 800, "LastPowerOutputWatts": random.randint(180, 240),
+            {"MemberId": "0", "Name": "PSU 1", "LineInputVoltage": 220 + p["idx"],
+             "PowerCapacityWatts": 800,
+             "LastPowerOutputWatts": load + p["rng"].randint(0, 40),
              "Status": {"State": "Enabled", "Health": "OK"}},
-            {"MemberId": "1", "Name": "PSU 2", "LineInputVoltage": 231,
-             "PowerCapacityWatts": 800, "LastPowerOutputWatts": random.randint(170, 230),
+            {"MemberId": "1", "Name": "PSU 2", "LineInputVoltage": 224 + p["idx"],
+             "PowerCapacityWatts": 800,
+             "LastPowerOutputWatts": load - 10 + p["rng"].randint(0, 40),
              "Status": {"State": "Enabled", "Health": "OK"}},
         ],
         "Redundancy": [{"Mode": "Failover", "Status": {"State": "Enabled", "Health": "OK"}}],
@@ -84,9 +116,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):  # noqa: N802
+        # profile по заголовку Host (mock-ilo-N) — эмуляция разных серверов парка
+        _handler_local.srv = type("S", (), {"host": self.headers.get("Host", "")})()
         p = self.path.split("?")[0].rstrip("/") or "/"
         if p == "/":
-            return self._json({"iLO": "web interface mock", "up": True})
+            host = self.headers.get("Host", "")
+            name = host.partition(":")[0] or "mock-dl380g8-01"
+            return self._json({"iLO": "web interface mock", "up": True, "name": name})
         if p == "/redfish/v1":
             p = "/redfish/v1/"
 
@@ -106,7 +142,8 @@ class Handler(BaseHTTPRequestHandler):
             "/redfish/v1/Systems/1": {
                 "@odata.id": "/redfish/v1/Systems/1", "Id": "1", "Name": "Computer System",
                 "PowerState": "On", "BiosVersion": "P29 06/18/2024",
-                "Manufacturer": "HPE", "Model": "ProLiant DL380p Gen8",
+                "Manufacturer": "HPE",
+                "Model": _profile().get("model", "ProLiant DL380p Gen8"),
                 "ProcessorSummary": {"Count": 2, "LogicalProcessorCount": 16},
                 "MemorySummary": {"TotalSystemMemoryGiB": 64},
                 "Processors": {"@odata.id": "/redfish/v1/Systems/1/Processors"},
@@ -195,14 +232,15 @@ class Handler(BaseHTTPRequestHandler):
         if p.endswith("/Entries"):
             origin = p[: -len("/Entries")]
             base = int(time.time())
+            n = 2 + _profile()["idx"] % len(LOG_ENTRIES)   # у каждого сервера свой объём журнала
             return self._json({
-                "@odata.id": p, "MembersCount": len(LOG_ENTRIES),
+                "@odata.id": p, "MembersCount": n,
                 "Members": [
                     {"@odata.id": f"{p}/{i}", "Id": str(i), "EntryType": "Event",
                      "Created": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                               time.gmtime(base - i * 3600)),
                      "Severity": e["Severity"], "Message": {"Message": e["Message"]}}
-                    for i, e in enumerate(LOG_ENTRIES, 1)]})
+                    for i, e in enumerate(LOG_ENTRIES[:n], 1)]})
         if p in routes:
             return self._json(routes[p])
         if p == "/ribcl":

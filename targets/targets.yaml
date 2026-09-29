@@ -19,13 +19,121 @@ defaults:
     site: lab
 
 targets:
-  # фейковый iLO из этого же compose — для проверки всего пайплайна
+  # ------- ТЕСТОВЫЙ ПАРК: 22 «сервера» на одном mock-ilo -------
+  # Виртуальный Host (mock-ilo-N) позволяет одному mock-контейнеру эмулировать
+  # весь парк с уникальными показаниями датчиков — как на реальном железе.
   - name: mock-dl380g8-01
     url: https://mock-ilo:8443
+    host_header: mock-ilo-1
     labels:
       rack: r01
     ribcl_enabled: true       # задел IML/IEL (сработает на реальном железе)
     ribcl_command: "GET IML"
+
+  - name: mock-dl380g8-02
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-2
+    labels: {rack: r01}
+
+  - name: mock-dl380g8-03
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-3
+    labels: {rack: r01}
+
+  - name: mock-dl380g8-04
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-4
+    labels: {rack: r01}
+
+  - name: mock-dl380g8-05
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-5
+    labels: {rack: r01}
+
+  - name: mock-dl380g8-06
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-6
+    labels: {rack: r01}
+
+  - name: mock-dl380g8-07
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-7
+    labels: {rack: r02}
+
+  - name: mock-dl380g8-08
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-8
+    labels: {rack: r02}
+
+  - name: mock-dl380g8-09
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-9
+    labels: {rack: r02}
+
+  - name: mock-dl380g8-10
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-10
+    labels: {rack: r02}
+
+  - name: mock-dl380g8-11
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-11
+    labels: {rack: r02}
+
+  - name: mock-dl380g8-12
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-12
+    labels: {rack: r02}
+
+  - name: mock-dl380g8-13
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-13
+    labels: {rack: r03}
+
+  - name: mock-dl380g8-14
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-14
+    labels: {rack: r03}
+
+  - name: mock-dl380g8-15
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-15
+    labels: {rack: r03}
+
+  - name: mock-dl380g8-16
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-16
+    labels: {rack: r03}
+
+  - name: mock-dl380g8-17
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-17
+    labels: {rack: r03}
+
+  - name: mock-dl380g8-18
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-18
+    labels: {rack: r03}
+
+  - name: mock-dl380g8-19
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-19
+    labels: {rack: r04}
+
+  - name: mock-dl380g8-20
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-20
+    labels: {rack: r04}
+
+  - name: mock-dl380g8-21
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-21
+    labels: {rack: r04}
+
+  - name: mock-dl380g8-22
+    url: https://mock-ilo:8443
+    host_header: mock-ilo-22
+    labels: {rack: r04}
 
   # ------- сюда добавляются реальные 22 сервера -------
   # - name: dl380g8-01
