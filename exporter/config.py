@@ -62,6 +62,7 @@ DEFAULTS: dict[str, Any] = {
     "ribcl_enabled": False,
     "ribcl_command": "",
     "host_header": "",
+    "allow_sni_mismatch": False,
     "labels": {},
 }
 
@@ -96,6 +97,8 @@ class TargetConfig:
     ribcl_command: str = ""
     # виртуальный Host для HTTP-запросов (тестовый стенд: один mock на весь парк)
     host_header: str = ""
+    # разрешить подмену Host/SNI на имя, отличное от хоста URL (только mock!)
+    allow_sni_mismatch: bool = False
 
     @property
     def base_url(self) -> str:
@@ -155,6 +158,7 @@ def _merge_target(raw: dict, defaults: dict, index: int) -> TargetConfig:
         for k in (
             "username", "password", "timeout", "verify_tls",
             "enabled_collectors", "ribcl_enabled", "ribcl_command", "host_header",
+            "allow_sni_mismatch",
         )
     }
     merged.update({k: v for k, v in raw.items() if k != "labels"})
@@ -183,6 +187,7 @@ def _merge_target(raw: dict, defaults: dict, index: int) -> TargetConfig:
         ribcl_enabled=_as_bool(merged.get("ribcl_enabled", False)),
         ribcl_command=str(merged.get("ribcl_command") or ""),
         host_header=str(merged.get("host_header") or ""),
+        allow_sni_mismatch=_as_bool(merged.get("allow_sni_mismatch", False)),
     )
 
 

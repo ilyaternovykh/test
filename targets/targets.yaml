@@ -14,6 +14,11 @@ defaults:
   timeout: 15
   verify_tls: false           # iLO отдаёт самоподписанный сертификат
   enabled_collectors: [web, redfish]
+  # ВАЖНО: подмена Host (host_header) разрешена только на тестовом стенде,
+  # где один mock-контейнер эмулирует весь парк. Реальные iLO4 проверяют
+  # заголовок Host и отвечают 400 на «чужой» — для реальных целей оставьте
+  # host_header/allow_sni_mismatch пустыми/false (тогда Host = хост из URL).
+  allow_sni_mismatch: true
   extra_labels:
     model: dl380p-gen8
     site: lab

@@ -10,10 +10,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
+from urllib.parse import urlsplit
 
 import requests
 import urllib3
@@ -41,10 +43,20 @@ class Metric:
 
 
 class Session:
-    """Тонкая обёртка над requests.Session c базовым URL и basic-auth."""
+    """Тонкая обёртка над requests.Session c базовым URL и basic-auth.
+
+    ВАЖНО для реальных iLO4 (Gen8/Gen9): прошивка iLO жёстко проверяет
+    заголовок Host и отвечает 400 Bad Request на «чужой» (IP-адрес, имя
+    контейнера и т.п.). Поэтому по умолчанию в Host всегда отправляется
+    каноническое имя хоста из URL цели — запросы к реальным iLO работают
+    как раньше. Подмена Host на виртуальное имя нужна только тестовому
+    стенду (один mock-контейнер эмулирует весь парк) — включается флагом
+    allow_sni_mismatch и не влияет на дефолтное поведение.
+    """
 
     def __init__(self, base_url: str, username: str = "", password: str = "",
-                 timeout: float = 15, verify: bool = False, host_header: str = ""):
+                 timeout: float = 15, verify: bool = False, host_header: str = "",
+                 allow_sni_mismatch: bool = False):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.session = requests.Session()
@@ -58,14 +70,20 @@ class Session:
             "User-Agent": "ilo-exporter/1.0",
             "Accept": "application/json",
         })
-        if host_header:
-            # Виртуальный хост: один эндпоинт может эмулировать несколько iLO
-            # (mock-ilo для теста парка из N серверов).
-            # ВАЖНО: requests/urllib3 игнорируют заголовок "Host" в session.headers
-            # (он управляется на уровне соединения), поэтому подмена Host
-            # выполняется через transport adapter, переписывающий PreparedRequest.
+        # Canonical Host из URL цели — то, что реально ожидает iLO.
+        canonical_host = urlsplit(self.base_url).netloc
+        if host_header and allow_sni_mismatch:
+            # Тестовый стенд: виртуальный хост при другом фактическом IP/SNI.
             self.session.mount("http://", _HostOverrideAdapter(host_header))
             self.session.mount("https://", _HostOverrideAdapter(host_header))
+        elif host_header and canonical_host.split(":")[0] != host_header.split(":")[0]:
+            # Реальный сервер, но в конфиге проставлен host_header (например,
+            # скопированный из примера мока): НЕ подменяем Host — иначе iLO4
+            # вернёт 400 и все метрик-коллекторы умрут. Предупреждаем один раз.
+            logging.getLogger("ilo-exporter").warning(
+                "host_header=%r не совпадает с хостом URL %r — подмена Host отключена "
+                "(поле 'host_header' нужно только для mock-стенда; для реальных iLO "
+                "оставьте его пустым)", host_header, base_url)
 
     def get(self, path: str, timeout: Optional[float] = None,
             headers: Optional[dict] = None, stream: bool = False):
@@ -80,14 +98,26 @@ class Session:
                                  allow_redirects=allow_redirects)
 
 
+# (Классы соединений не требуются: urllib3>=2 сам пропускает автоматический
+# Host, если он присутствует в заголовках запроса — см. _HostOverrideAdapter.send)
+
+
 class _HostOverrideAdapter(requests.adapters.HTTPAdapter):
-    """Транспорт, подменяющий HTTP-заголовок Host (виртуальные хосты)."""
+    """Транспорт для mock-стенда: свой Host при чужом IP/TLS-сервере.
+
+    requests/urllib3 игнорируют "Host" в session.headers (заголовок
+    управляется на уровне соединения), поэтому подмена выполняется через
+    ConnectionCls пулов. Реальные iLO этот путь не используют: там Host
+    всегда канонический из URL цели (см. Session).
+    """
 
     def __init__(self, host_header: str, *args, **kwargs):
         self._host_header = host_header
         super().__init__(*args, **kwargs)
 
     def send(self, request, *args, **kwargs):
+        # requests кладёт "Host" в заголовки; urllib3 (>=1.26/2.x) видит его и
+        # пропускает автоматический Host соединения -> на провод уходит наш.
         request.headers["Host"] = self._host_header
         return super().send(request, *args, **kwargs)
 

@@ -73,7 +73,8 @@ def _collect(target) -> list[Metric]:
 
     session = Session(target.base_url, "", "", timeout=target.timeout,
                       verify=target.verify_tls,
-                      host_header=getattr(target, "host_header", ""))
+                      host_header=getattr(target, "host_header", ""),
+                      allow_sni_mismatch=getattr(target, "allow_sni_mismatch", False))
 
     body = None
     # Путь A: iLO4/iLO5 — RIBCL через Redfish (рекомендуемый, начиная с Gen9)
