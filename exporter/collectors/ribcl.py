@@ -72,7 +72,8 @@ def _collect(target) -> list[Metric]:
     kind = "iel" if "IEL" in command.upper() else "iml"
 
     session = Session(target.base_url, "", "", timeout=target.timeout,
-                      verify=target.verify_tls)
+                      verify=target.verify_tls,
+                      host_header=getattr(target, "host_header", ""))
 
     body = None
     # Путь A: iLO4/iLO5 — RIBCL через Redfish (рекомендуемый, начиная с Gen9)

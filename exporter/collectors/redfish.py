@@ -412,7 +412,8 @@ def _collect(target) -> list[Metric]:
     metrics: list[Metric] = []
 
     session = Session(target.base_url, target.username, target.password,
-                      timeout=target.timeout, verify=target.verify_tls)
+                      timeout=target.timeout, verify=target.verify_tls,
+                      host_header=getattr(target, "host_header", ""))
     client = RedfishClient(session)
 
     root = client.service_root()
