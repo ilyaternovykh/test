@@ -61,6 +61,7 @@ DEFAULTS: dict[str, Any] = {
     "extra_labels": {},
     "ribcl_enabled": False,
     "ribcl_command": "",
+    "host_header": "",
     "labels": {},
 }
 
