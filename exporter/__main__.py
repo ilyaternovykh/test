@@ -213,10 +213,34 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, html.encode())
 
         if parsed.path == "/healthz":
+            # plain-text liveness для балансировщиков/проб: 200 OK / 503 STALE
             age = time.time() - self.snapshot.updated
             ok = self.snapshot.updated and age < self.cfg.collect_interval * 3
             status = b"OK\n" if ok else b"STALE\n"
             return self._send(200 if ok else 503, status)
+
+        if parsed.path == "/healthz-metrics":
+            # Prometheus-совместимый healthcheck (скрейпится job'ом
+            # ilo-exporter-health): текстовый ответ здесь ломает парсер,
+            # поэтому отдаём валидные metrics.
+            age = time.time() - self.snapshot.updated
+            ok = 1 if (self.snapshot.updated
+                       and age < self.cfg.collect_interval * 3) else 0
+            lines = [
+                "# HELP ilo_exporter_healthy 1 if the last collection cycle "
+                "finished recently, 0 otherwise.",
+                "# TYPE ilo_exporter_healthy gauge",
+                f"ilo_exporter_healthy {ok}",
+                "# HELP ilo_exporter_snapshot_age_seconds Age of the last "
+                "successful collection snapshot.",
+                "# TYPE ilo_exporter_snapshot_age_seconds gauge",
+                f"ilo_exporter_snapshot_age_seconds {age:.3f}"
+                if self.snapshot.updated else
+                "ilo_exporter_snapshot_age_seconds nan",
+                "",
+            ]
+            return self._send(200, "\n".join(lines).encode(),
+                              CONTENT_TYPE_LATEST)
 
         if parsed.path.rstrip("/") == self.cfg.path.rstrip("/"):
             single = qs.get("target", [""])[0].strip()
