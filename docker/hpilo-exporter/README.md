@@ -44,3 +44,25 @@ compose-`command` аргументы склеивались неверно, пр
 3. **Дашборд 13709 использует метрики `hpilo_*`** (другой префикс, чем нашего
    ilo-exportter) — панели «HP iLO» наполняются только job'ом `hpilo`; это
    ожидаемо и нормально (два независимых источника данных).
+4. **Сборка через proxy.** В Dockerfile добавлены `ARG HTTP_PROXY/HTTPS_PROXY/NO_PROXY`
+   (только build-time, в рантайме прокси сброшен — иначе сломается доступ к iLO).
+   Перед сборкой экспортируйте переменные в той же shell-сессии:
+   `export HTTP_PROXY=http://proxy:3128 HTTPS_PROXY=$HTTP_PROXY NO_PROXY=localhost,127.0.0.1,.svc,172.16.0.0/12`
+   затем `docker compose build hpilo-exporter`. Альтернатива — `~/.docker/config.json`
+   с `"proxies": {"default": {...}}` (подхватывается автоматически).
+   Для корпоративного MITM-прокси с самоподписанным сертификатом смонтируйте CA:
+   `build: extra_hosts` не нужен, достаточно тома с `.crt` + `update-ca-certificates`,
+   либо отключите проверку для сборки (`GIT_SSL_NO_VERIFY=1`, `pip --trusted-host`).
+
+## Диагностика: job `hpilo` не появился в /targets
+
+Если в контейнере prometheus файл `/etc/prometheus/targets/hpilo-targets.json`
+есть и содержит ваши серверы, а job всё равно отсутствует — значит в запущенном
+контейнере старый `prometheus.yml` (volume монтируется при создании контейнера;
+при обновлении репозитория на лету содержимое может не переехать без пересоздания):
+
+```bash
+docker compose up -d --force-recreate prometheus
+# проверить, что конфиг реально загружен (должен быть job hpilo с file_sd_configs):
+curl -s http://localhost:9090/api/v1/status/config | python3 -m json.tool | grep -A3 hpilo
+```
