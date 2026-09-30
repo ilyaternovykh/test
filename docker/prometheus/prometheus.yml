@@ -26,6 +26,22 @@ scrape_configs:
 
   # ---------- hpilo-exporter (github.com/hpilo-exporter/hpilo-exporter) ----------
   # on-demand proxy-скрейп: Prometheus дергает /metrics?ilo_host=<IP> для каждой цели.
+  #
+  # ВАЖНО: параметры ?ilo_host=&ilo_port= подставляет САМ Prometheus через
+  # relabel_configs (правило `replacement: ${1}` берёт захватку regex из __address__).
+  # В файле file_sd поля "params" БЫТЬ НЕ ДОЛЖНО. Формат file_sd описан строго:
+  #   [{"targets": [...], "labels": {...}}]
+  # Любое другое поле — жёсткая ошибка разбора (targetgroup.UnmarshalJSON вызывает
+  # dec.DisallowUnknownFields(), см. discovery/targetgroup/targetgroup.go), поэтому
+  # вся группа отбрасывалась целиком:
+  #   err="json: unknown field \"params\""  ->  job hpilo без целей.
+  # Поле params существует только в static_configs основного конфига — вот почему
+  # оно «проходило» promtool и не работало в file_sd.
+  #
+  # Порты берутся прямо из inventory (mock — :8443, прод iLO — 443 или явно
+  # указанные), поэтому ENV ilo_port в compose более НЕ задаётся: приоритет
+  # теперь «порт из адреса цели > ENV > 443».
+  #
   # Цели/имена — из ЕДИНОГО инвентаря targets/inventory.ini:
   #   ./scripts/gen-targets.sh   -> перегенерирует targets/hpilo-targets.json
   # Секреты ilo_user/ilo_password задаются ENV контейнера hpilo-exporter (см. docker-compose.yml).
@@ -38,6 +54,22 @@ scrape_configs:
       - files:
           - /etc/prometheus/targets/hpilo-targets.json
         refresh_interval: 60s
+    relabel_configs:
+      # __address__ = "<iLO-хост>:<порт>" из file_sd -> сам hpilo-exporter
+      - target_label: __address__
+        replacement: hpilo-exporter:9416
+      # хост (без порта) -> ?ilo_host=
+      - source_labels: [__address__]
+        regex: '([^:]+)(:.*)?'
+        replacement: ${1}
+        target_label: __param_ilo_host
+      # порт (или 443 по умолчанию) -> ?ilo_port=
+      - source_labels: [__address__]
+        regex: '[^:]+:(\d+)'
+        replacement: ${1}
+        target_label: __param_ilo_port
+      - source_labels: [__address__]
+        target_label: instance
 
   - job_name: prometheus
     static_configs:

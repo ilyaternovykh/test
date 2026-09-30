@@ -1,7 +1,7 @@
 [
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-01",
@@ -12,19 +12,11 @@
       "rack": "r01",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-02",
@@ -35,19 +27,11 @@
       "rack": "r01",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-03",
@@ -58,19 +42,11 @@
       "rack": "r01",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-04",
@@ -81,19 +57,11 @@
       "rack": "r01",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-05",
@@ -104,19 +72,11 @@
       "rack": "r01",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-06",
@@ -127,19 +87,11 @@
       "rack": "r01",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-07",
@@ -150,19 +102,11 @@
       "rack": "r02",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-08",
@@ -173,19 +117,11 @@
       "rack": "r02",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-09",
@@ -196,19 +132,11 @@
       "rack": "r02",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-10",
@@ -219,19 +147,11 @@
       "rack": "r02",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-11",
@@ -242,19 +162,11 @@
       "rack": "r03",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-12",
@@ -265,19 +177,11 @@
       "rack": "r03",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-13",
@@ -288,19 +192,11 @@
       "rack": "r03",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-14",
@@ -311,19 +207,11 @@
       "rack": "r03",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-15",
@@ -334,19 +222,11 @@
       "rack": "r04",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-16",
@@ -357,19 +237,11 @@
       "rack": "r04",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-17",
@@ -380,19 +252,11 @@
       "rack": "r04",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-18",
@@ -403,19 +267,11 @@
       "rack": "r04",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-19",
@@ -426,19 +282,11 @@
       "rack": "r05",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-20",
@@ -449,19 +297,11 @@
       "rack": "r05",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-21",
@@ -472,19 +312,11 @@
       "rack": "r05",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   },
   {
     "targets": [
-      "hpilo-exporter:9416"
+      "mock-ilo:8443"
     ],
     "labels": {
       "server": "mock-dl380g8-22",
@@ -495,14 +327,6 @@
       "rack": "r05",
       "model": "dl380p-gen8",
       "site": "lab"
-    },
-    "params": {
-      "ilo_host": [
-        "mock-ilo"
-      ],
-      "ilo_port": [
-        "8443"
-      ]
     }
   }
 ]

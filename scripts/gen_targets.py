@@ -148,29 +148,34 @@ def gen_hpilo_json(defaults: dict, servers: list[dict]) -> str:
     ВАЖНО про hpilo-python: библиотека при hostname == 'localhost' переключается
     на локальный интерфейс через hponcfg (ILO_LOCAL), а не идёт по сети; в
     контейнере hponcfg нет -> IloCommunicationError. Поэтому в params передаётся
-    РЕАЛЬНЫЙ адрес iLO (ip/host из url), а отображаемое имя сервера остаётся в
-    labels.ilo_host.
+    РЕАЛЬНЫЙ адрес iLO (ip/host:порт из url) живёт в targets[] — Prometheus
+    сам подставит его в ?ilo_host=&ilo_port= через relabel_configs,
+    а отображаемое имя сервера остаётся в labels.ilo_host.
     """
     out = []
     for s in servers:
         hostport = s["url"].split("//", 1)[-1].rstrip("/")
-        host, _, port = hostport.partition(":")
+        # ВАЖНО: в discovery-файле file_sd поля "params" быть не может —
+        # Prometheus парсит его строго как [{targets, labels}] и падает на
+        # `json: unknown field "params"` (job hpilo оставался без целей).
+        # Параметры запроса ?ilo_host=&ilo_port= подставляет сам Prometheus
+        # relabel_configs'ами из __address__ (см. docker/prometheus/prometheus.yml),
+        # поэтому адрес iLO живёт прямо в targets: "<хост>:<порт>".
+        if ":" not in hostport:
+            hostport += ":443"             # порт по умолчанию для реальных iLO
         entry = {
-            "targets": ["hpilo-exporter:9416"],
+            "targets": [hostport],         # адрес ПОДКЛЮЧЕНИЯ (не localhost!)
             "labels": {
                 "server": s["name"],
                 "target": s["name"],
                 "name": s["name"],
-                "ilo_host": s["name"],      # для Grafana-легенды/переменной $server
-                "ilo_addr": hostport,       # фактический адрес iLO (debug)
+                "ilo_host": s["name"],     # для Grafana-легенды/переменной $server
+                "ilo_addr": hostport,      # фактический адрес iLO (debug)
                 "rack": s["rack"],
                 "model": s["model"],
                 "site": s["site"],
             },
-            "params": {"ilo_host": [host]},  # адрес ПОДКЛЮЧЕНИЯ (не localhost!)
         }
-        if port:
-            entry["params"]["ilo_port"] = [port]
         out.append(entry)
     return json.dumps(out, indent=2, ensure_ascii=False) + "\n"
 
