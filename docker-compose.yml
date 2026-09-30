@@ -43,6 +43,27 @@ services:
     depends_on:
       - mock-ilo
 
+  # ---------- hpilo-exporter (github.com/hpilo-exporter/hpilo-exporter) ----------
+  # Дополнительный сборщик HPBIOS health_at_a_glance (RIBCL XML): вентиляторы,
+  # температура, питание, контроллеры/диски, прошивка. Скрейпится Prometheus
+  # по схеме ?ilo_host=<IP>; список целей — из единого inventory.ini
+  # (targets/hpilo-targets.json, regenerate: ./scripts/gen-targets.sh).
+  hpilo-exporter:
+    image: hpilo-exporter:local
+    build:
+      context: https://github.com/hpilo-exporter/hpilo-exporter.git#main
+    container_name: hpilo-exporter
+    restart: unless-stopped
+    environment:
+      ilo_user: ${ILO_USER:-monitor}
+      ilo_password: ${ILO_PASS:-secret}
+      ilo_port: "443"
+    command: ["--address=0.0.0.0", "--port=9416", "--endpoint=/metrics"]
+    ports:
+      - "9416:9416"
+    depends_on:
+      - mock-ilo
+
   # ---------- хранение ----------
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -58,6 +79,7 @@ services:
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./targets/hpilo-targets.json:/etc/prometheus/targets/hpilo-targets.json:ro
       - prometheus-data:/prometheus
 
   alertmanager:

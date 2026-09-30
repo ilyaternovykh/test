@@ -24,6 +24,21 @@ scrape_configs:
     static_configs:
       - targets: ["ilo-exporter:9127"]
 
+  # ---------- hpilo-exporter (github.com/hpilo-exporter/hpilo-exporter) ----------
+  # on-demand proxy-скрейп: Prometheus дергает /metrics?ilo_host=<IP> для каждой цели.
+  # Цели/имена — из ЕДИНОГО инвентаря targets/inventory.ini:
+  #   ./scripts/gen-targets.sh   -> перегенерирует targets/hpilo-targets.json
+  # Секреты ilo_user/ilo_password задаются ENV контейнера hpilo-exporter (см. docker-compose.yml).
+  - job_name: hpilo
+    metrics_path: /metrics
+    scrape_interval: 120s            # HPBIOS-XML тяжелый, не душим iLO частыми запросами
+    scrape_timeout: 45s              # hpilo-сессия + XML может быть медленной
+    honor_labels: true               # server/target/name из file_sd важнее instance
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/hpilo-targets.json
+        refresh_interval: 60s
+
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]

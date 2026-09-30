@@ -5,5 +5,7 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: true
+    # фиксированный uid — на него ссылаются provisioning-дашборды (ilo-park.json, hp-ilo-13709.json)
+    uid: PBFA97CFB590B2093
     jsonData:
       timeInterval: 30s
