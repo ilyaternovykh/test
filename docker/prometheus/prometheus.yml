@@ -42,9 +42,25 @@ scrape_configs:
   # указанные), поэтому ENV ilo_port в compose более НЕ задаётся: приоритет
   # теперь «порт из адреса цели > ENV > 443».
   #
+  # ИСПРАВЛЕНИЕ (симптом: ?ilo_host=hpilo-exporter&ilo_port=9416 вместо реальных
+  # адресов iLO): раньше правило подмены __address__ -> hpilo-exporter:9416 стояло
+  # ПЕРВЫМ, а захват хоста/порта делался из __address__ ПОСЛЕ подмены. Так как
+  # relabel_configs применяются последовательно и каждая следующая rule видит
+  # уже изменённые метки, во все ?ilo_host=&ilo_port= (и в instance) попадал сам
+  # экспортёр. Теперь порядок: захват из исходного __address__ -> instance ->
+  # и только в конце подмена __address__. Regex'ы матчатся Prometheus целиком
+  # (как будто обёрнуты в ^...$), поэтому захваты написаны с якорями.
+  #
   # Цели/имена — из ЕДИНОГО инвентаря targets/inventory.ini:
   #   ./scripts/gen-targets.sh   -> перегенерирует targets/hpilo-targets.json
-  # Секреты ilo_user/ilo_password задаются ENV контейнера hpilo-exporter (см. docker-compose.yml).
+  #
+  # СЕКРЕТЫ: экспортёр читает креды с приоритетом «параметр запроса > ENV > дефолт»,
+  # поэтому Prometheus может добавить ?ilo_user=&ilo_password= к каждому запросу.
+  # Значения берутся из env-переменных PROM_ILO_USER / PROM_ILO_PASS (задаются в
+  # .env, см. docker-compose.yml). Если переменные не заданы, подставляются
+  # monitor/secret — те же дефолты, что у ENV контейнера hpilo-exporter, поэтому
+  # поведение не меняется. Итоговый URL скрейпа полностью эквивалентен ручной
+  # проверке: curl 'http://127.0.0.1:9416/metrics?ilo_host=<IP>&ilo_port=<порт>&ilo_user=<u>&ilo_password=<p>'
   - job_name: hpilo
     metrics_path: /metrics
     scrape_interval: 120s            # HPBIOS-XML тяжелый, не душим iLO частыми запросами
@@ -55,21 +71,45 @@ scrape_configs:
           - /etc/prometheus/targets/hpilo-targets.json
         refresh_interval: 60s
     relabel_configs:
-      # __address__ = "<iLO-хост>:<порт>" из file_sd -> сам hpilo-exporter
-      - target_label: __address__
-        replacement: hpilo-exporter:9416
-      # хост (без порта) -> ?ilo_host=
+      # ПОРЯДОК ПРАВИЛ ВАЖЕН: relabel-configs применяются последовательно,
+      # каждое следующее видит уже изменённый набор меток. Поэтому сначала
+      # извлекаем хост/порт из ИСХОДНОГО __address__, и только в самом конце
+      # подменяем __address__ на сам экспортёр.
+      #
+      # КРИТИЧНО: во всех правилах захвата — якоря ^...$ (полное совпадение).
+      # В Prometheus regex матчится целиком по значению метки; без якорей
+      # "неполные" захваты ведут себя непредсказуемо, а правило с regex,
+      # который НЕ сматчился, вообще пропускается (replacement не применяется).
+      # Именно из-за этого вместо реальных адресов iLO в ?ilo_host= попадало
+      # значение __address__ после подмены ("hpilo-exporter"), а ?ilo_port= —
+      # "9416".
+      #
+      # 1) хост (без порта) из "__host:__port" или просто "__host" -> ?ilo_host=
       - source_labels: [__address__]
-        regex: '([^:]+)(:.*)?'
+        regex: '(^[^:]+)(?::\d+)?$'
         replacement: ${1}
         target_label: __param_ilo_host
-      # порт (или 443 по умолчанию) -> ?ilo_port=
+      # 2) порт из "__host:__port"; если порта нет — правило не срабатывает
+      #    и hpilo-exporter использует свой дефолт 443 (fallback ENV ilo_port)
       - source_labels: [__address__]
-        regex: '[^:]+:(\d+)'
+        regex: '^[^:]+:(\d+)$'
         replacement: ${1}
         target_label: __param_ilo_port
+      # 2a) креды iLO -> ?ilo_user=&ilo_password= (полный эквивалент ручного curl;
+      #     экспортёр отдаёт приоритет параметрам запроса над ENV). Значения —
+      #     из env контейнера prometheus (PROM_ILO_USER/PROM_ILO_PASS из .env);
+      #     если env не заданы — дефолты monitor/secret, совпадающие с ENV hpilo-exporter
+      - target_label: __param_ilo_user
+        replacement: ${PROM_ILO_USER:-monitor}
+      - target_label: __param_ilo_password
+        replacement: ${PROM_ILO_PASS:-secret}
+      # 3) имя цели сохраняем в instance ДО подмены адреса (иначе там окажется
+      #    "hpilo-exporter:9416")
       - source_labels: [__address__]
         target_label: instance
+      # 4) и только теперь перенаправляем запрос на сам экспортёр
+      - target_label: __address__
+        replacement: hpilo-exporter:9416
 
   - job_name: prometheus
     static_configs:

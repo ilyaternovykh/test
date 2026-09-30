@@ -61,11 +61,23 @@ dl380-prod-07 ansible_host=10.20.30.17 rack=r03 user=ilo_admin collectors=web,re
 Собран из форка (`build: context: ./docker/hpilo-exporter` — upstream-Dockerfile +
 применение `patch.py`, см. комментарии в нём), слушает :9416, секреты берёт из ENV
 (`ILO_USER/ILO_PASS` из `.env`).
-Prometheus скрейпит его job `hpilo` по схеме `/metrics?ilo_host=<IP>&ilo_port=<порт>`:
+Prometheus скрейпит его job `hpilo` по схеме
+`/metrics?ilo_host=<IP>&ilo_port=<порт>&ilo_user=<u>&ilo_password=<p>` — полностью
+эквивалентно ручной проверке `curl 'http://127.0.0.1:9416/metrics?...'`:
 адрес каждой цели (`<хост>:<порт>` из inventory) лежит в `targets[]` файла file_sd и
-подставляется в query-параметры relabel_configs'ами в `docker/prometheus/prometheus.yml`.
+подставляется в query-параметры relabel_configs'ами в `docker/prometheus/prometheus.yml`;
+креды — через `__param_ilo_user/__param_ilo_password` из env контейнера prometheus
+(`PROM_ILO_USER/PROM_ILO_PASS`, задаются в compose из тех же `ILO_USER/ILO_PASS` из `.env`).
 В файле file_sd **не должно** быть поля `params` — discovery-формат принимает только
-`targets`/`labels` (строгая проверка: `json: unknown field "params"` роняет весь job). Дашборд Grafana 13709 «HP iLO» лежит в `docker/grafana/dashboards/hp-ilo-13709.json`
+`targets`/`labels` (строгая проверка: `json: unknown field "params"` роняет весь job).
+
+Порядок relabel_configs критичен: захват `__param_ilo_host/__param_ilo_port` и
+`instance` делается из **исходного** `__address__`, и только последним правилом
+`__address__` подменяется на `hpilo-exporter:9416`. Если подмену поставить первой,
+все параметры примут значение `ilo_host=hpilo-exporter&ilo_port=9416` (классический
+баг proxy-scrape) — экспортёр будет «скрейпить сам себя» вместо реальных iLO.
+
+Дашборд Grafana 13709 «HP iLO» лежит в `docker/grafana/dashboards/hp-ilo-13709.json`
 (папка "HPE iLO", datasource Prometheus uid `PBFA97CFB590B2093`).
 
 Подробнее — docs/ARCHITECTURE.md.

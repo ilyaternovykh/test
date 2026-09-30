@@ -89,6 +89,11 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=90d
       - --web.enable-lifecycle
+    # env для подстановки ${PROM_ILO_USER}/${PROM_ILO_PASS} в relabel_configs
+    # job hpilo -> ?ilo_user=&ilo_password= в URL скрейпа (см. prometheus.yml)
+    environment:
+      PROM_ILO_USER: ${ILO_USER:-monitor}
+      PROM_ILO_PASS: ${ILO_PASS:-secret}
     ports:
       - "9090:9090"
     volumes:
