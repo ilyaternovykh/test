@@ -37,6 +37,14 @@ RUN apk --no-cache add git \
     && pip install --no-cache-dir -e /usr/src/hpilo_exporter \
     && apk --no-cache del git
 
+# ОБЯЗАТЕЛЬНО: применить фиксы к upstream-коду (см. patch.py).
+# Без этого шага контейнер работает «голым» upstream: /metrics?ilo_host=X падает
+# с KeyError/500 (метрик нет), а ilo_port берётся из ENV и на проде скрейпит
+# не туда -> job hpilo пустой, hpilo-exporter не виден в Prometheus targets.
+COPY patch.py /usr/src/patch.py
+USER root
+RUN python3 /usr/src/patch.py /usr/src/hpilo_exporter/src/hpilo_exporter/exporter.py
+
 # Сбрасываем прокси: в рантайме контейнер ходит только на iLO внутри сети compose.
 ENV http_proxy= https_proxy= no_proxy=
 
