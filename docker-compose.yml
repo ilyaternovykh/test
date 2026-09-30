@@ -74,6 +74,14 @@ services:
     image: prom/prometheus:v2.54.1
     container_name: prometheus
     restart: unless-stopped
+    # ВАЖНО: без этого блока compose молча использует ранее созданный контейнер,
+    # и новые volume (например hpilo-targets.json) в него НЕ монтируются —
+    # job hpilo есть в prometheus.yml, но целей не видно.
+    create: true
+    replace: true
+    deploy:
+      restart_policy:
+        condition: on-failure
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
