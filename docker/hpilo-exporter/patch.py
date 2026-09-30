@@ -113,15 +113,18 @@ def patch(path: Path) -> None:
         raise SystemExit("[patch] ERROR: block B (return_error) not found — upstream changed")
 
     # --- E) ilo_port: приоритет query-параметра над ENV ---
-    # В upstream `os.environ["ilo_port"]` имеет приоритет: если в контейнере
-    # задан ENV ilo_port (например "8443" для тестового стенда), то реальные
-    # iLO (порт 443) скрейпятся не туда -> таймаут, target DOWN, метрик нет.
-    old_f = """            try:
+    # В upstream `query or os.environ["ilo_port"]`: если в контейнере задан ENV
+    # ilo_port и при этом запрос пришёл БЕЗ ilo_port, скрейп уходит на ENV-порт
+    # вместо порта из адреса цели. Новый формат targets/hpilo-targets.json
+    # всегда передаёт ?ilo_port= (relabel_configs в prometheus.yml), но делаем
+    # ENV только fallback: «порт из запроса > ENV > 443».
+    # Якоря — по устойчивым подстрокам (upstream переставлял блоки).
+    old_f = '''            try:
                 ilo_port = int(
                     query_components.get("ilo_port", [""])[0] or os.environ["ilo_port"]
                 )
             except Exception:
-                ilo_port = 443"""
+                ilo_port = 443'''
     new_f = """            try:
                 # HPiLO_PATCHED: порт из запроса (file_sd params.ilo_port) важнее ENV
                 ilo_port = int(
@@ -134,7 +137,19 @@ def patch(path: Path) -> None:
     if old_f in src:
         src = src.replace(old_f, new_f)
     else:
-        raise SystemExit("[patch] ERROR: block E (ilo_port parsing) not found — upstream changed")
+        # вариант 2: ENV обязателен через .get(...) без `or 443` в except
+        old_f2 = '''            try:
+                ilo_port = int(
+                    query_components.get("ilo_port", [""])[0] or os.environ.get("ilo_port")
+                )
+            except Exception:
+                ilo_port = 443'''
+        if old_f2 in src:
+            src = src.replace(old_f2, new_f)
+        elif "HPiLO_PATCHED: порт из запроса" in src:
+            pass  # уже пропатчено этим блоком ранее
+        else:
+            raise SystemExit("[patch] ERROR: block E (ilo_port parsing) not found — upstream changed")
 
     # --- C) hpilo_up == 1 на успешном пути (после сбора embedded_health) ---
     old_c = """                # get health, mod by n27051538

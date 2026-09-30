@@ -63,7 +63,9 @@ services:
       # per-server через ENV не предусмотрен upstream; для разных паролей — см. README)
       ilo_user: ${ILO_USER:-monitor}
       ilo_password: ${ILO_PASS:-secret}
-      ilo_port: "8443"          # тестовый стенд; на проде: 443
+      # ilo_port НЕ задаём: порт каждой цели приходит параметром ?ilo_port=
+      # из targets/hpilo-targets.json (адрес "<iLO-хост>:<порт>" + relabel_configs
+      # в prometheus.yml). ENV остался бы только fallback (дефолт 443).
     ports:
       - "9416:9416"
     depends_on:

@@ -58,10 +58,14 @@ dl380-prod-07 ansible_host=10.20.30.17 rack=r03 user=ilo_admin collectors=web,re
 
 ## hpilo-exporter (дополнительный сборщик)
 
-Обёрнут в compose (`build: context: https://github.com/hpilo-exporter/hpilo-exporter.git#main`),
-слушает :9416, секреты берёт из ENV (`ILO_USER/ILO_PASS` из `.env`).
-Prometheus скрейпит его job `hpilo` по схеме `/metrics?ilo_host=<IP>` для каждой цели из
-инвентаря. Дашборд Grafana 13709 «HP iLO» лежит в `docker/grafana/dashboards/hp-ilo-13709.json`
+Собран из форка (`build: context: ./docker/hpilo-exporter` — upstream-Dockerfile +
+применение `patch.py`, см. комментарии в нём), слушает :9416, секреты берёт из ENV
+(`ILO_USER/ILO_PASS` из `.env`).
+Prometheus скрейпит его job `hpilo` по схеме `/metrics?ilo_host=<IP>&ilo_port=<порт>`:
+адрес каждой цели (`<хост>:<порт>` из inventory) лежит в `targets[]` файла file_sd и
+подставляется в query-параметры relabel_configs'ами в `docker/prometheus/prometheus.yml`.
+В файле file_sd **не должно** быть поля `params` — discovery-формат принимает только
+`targets`/`labels` (строгая проверка: `json: unknown field "params"` роняет весь job). Дашборд Grafana 13709 «HP iLO» лежит в `docker/grafana/dashboards/hp-ilo-13709.json`
 (папка "HPE iLO", datasource Prometheus uid `PBFA97CFB590B2093`).
 
 Подробнее — docs/ARCHITECTURE.md.
