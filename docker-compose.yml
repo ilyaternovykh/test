@@ -48,17 +48,22 @@ services:
   # температура, питание, контроллеры/диски, прошивка. Скрейпится Prometheus
   # по схеме ?ilo_host=<IP>; список целей — из единого inventory.ini
   # (targets/hpilo-targets.json, regenerate: ./scripts/gen-targets.sh).
+  #
+  # ВНИМАНИЕ: upstream-Dockerfile не работает как есть — ENTRYPOINT["hpilo-exporter"]
+  # + compose `command` склеиваются в argv без префикса "--" и main.py падает с
+  # argparse error. Поэтому пересобираем форк с фиксом: docker/hpilo-exporter/Dockerfile.
   hpilo-exporter:
-    image: hpilo-exporter:local
+    image: hpilo-exporter:fixed
     build:
-      context: https://github.com/hpilo-exporter/hpilo-exporter.git#main
+      context: ./docker/hpilo-exporter
     container_name: hpilo-exporter
     restart: unless-stopped
     environment:
+      # секреты НЕ в URL/file_sd — только здесь (или override ilo_user/ilo_password
+      # per-server через ENV не предусмотрен upstream; для разных паролей — см. README)
       ilo_user: ${ILO_USER:-monitor}
       ilo_password: ${ILO_PASS:-secret}
-      ilo_port: "443"
-    command: ["--address=0.0.0.0", "--port=9416", "--endpoint=/metrics"]
+      ilo_port: "8443"          # тестовый стенд; на проде: 443
     ports:
       - "9416:9416"
     depends_on:

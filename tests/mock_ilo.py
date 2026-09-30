@@ -7,6 +7,14 @@
 Managers, UpdateService/FirmwareInventory, LogServices (IML-like записи),
 а также POST /ribcl (дамп IML) и SessionService (для RIBCL-through-Redfish).
 
+POST /ribcl дополнительно эмулирует RIBCL-протокол библиотеки python-hpilo
+(которую использует hpilo-exporter): распознаёт <LOGIN .../> c проверкой
+учётки, GET_EMBEDDED_HEALTH_DATA (health_at_a_glance/temperature/fans/
+power_supplies/processors/memory/storage/nic_information),
+GET_PRODUCT_NAME / GET_SERVER_NAME / GET_HOST_POWER_STATUS / GET_FW_VERSION.
+Ответ — «сырой» HTTP (заголовки в теле), как это делает настоящая прошивка:
+библиотека сама парсит "HTTP/1.1 200\r\n...\r\n\r\n<?xml...".
+
 Запуск:   python3 tests/mock_ilo.py --port 8443 [--plain]
 Тесты:    ILO_URL=https://localhost:8443 python3 -m exporter --once
 """
@@ -15,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import ssl
@@ -102,7 +111,209 @@ LOG_ENTRIES = [
 ]
 
 
+def _ribcl_embedded_health(p: dict) -> str:
+    """GET_EMBEDDED_HEALTH_DATA в формате, который разбирает python-hpilo
+    (атрибуты вместо дочерних тегов там, где библиотека читает .get('VALUE'))."""
+    rng = p["rng"]
+    idx = p["idx"]
+    temps = [("01-Inlet Ambient", 20 + idx % 4), ("02-CPU 1", 40 + idx),
+             ("03-CPU 2", 43 + idx), ("04-P/S 1", 32 + idx % 6),
+             ("05-Board", 26 + idx % 5)]
+    fans = [(f"Fan {i}", 4200 + (p["seed"] + i * 137) % 1900, "OK") for i in range(1, 7)]
+    parts = ['<?xml version="1.0"?>', '<RIBCL VERSION="2.23">',
+             # RESPONSE STATUS=0x0 ("No error") — как настоящая прошивка;
+             # hpilo игнорирует его и берёт следующий message (payload).
+             '<RESPONSE STATUS="0x00000000" MESSAGE="No error" VER_ERR="0"/>',
+             # ВАЖНО: python-hpilo (_process_info_tag) ищет тег
+             # GET_EMBEDDED_HEALTH_DATA ЧЕРЕЗ message.find(...), т.е. только как
+             # ПРЯМОГО дочернего элемента корня <RIBCL>. Обёртка SERVER_INFO или
+             # GET_EMBEDDED_HEALTH выше уровнем ломает поиск ("Expected tag ...
+             # not found"). Значит корневой payload-тег должен быть именно
+             # GET_EMBEDDED_HEALTH_DATA, а его дети — HEALTH_AT_A_GLANCE и др.
+             '<GET_EMBEDDED_HEALTH_DATA>']
+    # health_at_a_glance
+    hag = {"BATTERY": "OK", "BIOS_HARDWARE": "OK", "MEMORY": "OK",
+           "PROCESSOR": "OK", "VRM": "OK", "DRIVE": "OK",
+           "FANS": "OK", "POWER_SUPPLIES": "OK", "TEMPERATURE": "OK",
+           "STORAGE": "OK" if idx % 7 else "Degraded",
+           "NETWORK": "Link Down" if idx % 5 == 0 else "OK"}
+    # ВАЖНО: формат XML для RIBCL-ответа скопирован с реальных дампов iLO4 —
+    # python-hpilo разбирает дочерние теги по АТРИБУТУ VALUE (или текстовому
+    # узлу), а не по произвольным атрибутам вроде STATUS/SPEED/LABEL.
+    parts.append("<HEALTH_AT_A_GLANCE>")
+    for k, v in hag.items():
+        parts.append(f'<{k} VALUE="{v}"'
+                     + (' REDUNDANCY="Redundant"' if k in ("FANS", "POWER_SUPPLIES") else "")
+                     + "/>")
+    parts.append("</HEALTH_AT_A_GLANCE>")
+    # temperature
+    parts.append("<TEMPERATURE>")
+    for name, val in temps:
+        parts.append(f'<CURRENTICREADING><LABEL>{name}</LABEL>'
+                     f'<VALUE>{val}</VALUE></CURRENTICREADING>')
+    parts.append("</TEMPERATURE>")
+    # fans
+    parts.append("<FANS>")
+    for name, speed, st in fans:
+        pct = speed // 100
+        parts.append(f'<FAN><LABEL>{name}</LABEL><PRESENT VALUE="Yes" />'
+                     f'<SPEED VALUE="{pct}" UNIT="%"/><STATUS VALUE="{st}"/></FAN>')
+    parts.append("</FANS>")
+    # power supplies
+    parts.append("<POWER_SUPPLIES>")
+    for i in (1, 2):
+        st, pr = ("OK", "Yes") if idx != i else ("Absent", "No")
+        parts.append(f'<POWERSUPPLY><LABEL>Power Supply {i}</LABEL>'
+                     f'<MODEL>NDAA-RTCW</MODEL>'
+                     f'<CAPACITY VALUE="560" UNIT="Watt"/>'
+                     f'<SERIALNUMBER>SN{p["seed"]}{i}</SERIALNUMBER>'
+                     f'<FIRMWARE_VERSION>2012-06-08,1.2</FIRMWARE_VERSION>'
+                     f'<PRESENT VALUE="{pr}" /><SPARE VALUE="N"/>'
+                     f'<STATUS VALUE="{st}"/></POWERSUPPLY>')
+    parts.append("</POWER_SUPPLIES>")
+    parts.append('<POWER_SUPPLY_SUMMARY><PRESENT_POWER_READING VALUE="%d" UNIT="Watt"/>'
+                 '</POWER_SUPPLY_SUMMARY>' % (150 + rng.randint(0, 120)))
+    # processors
+    parts.append("<PROCESSORS>")
+    for c in (1, 2):
+        parts.append(f'<CPU><LABEL>Processor {c}</LABEL><SOCKET>CPU{c}</SOCKET>'
+                     f'<CORES>8</CORES><SPEED>2400 MHz</SPEED>'
+                     f'<NAME>Intel Xeon E5-2620 v2</NAME>'
+                     f'<STATUS VALUE="OK"/></CPU>')
+    parts.append("</PROCESSORS>")
+    # memory
+    parts.append("<MEMORY><MEMORY_DETAILS_SUMMARY>")
+    for c in (1, 2):
+        parts.append(f'<CPU{c}><TOTAL_MEMORY_SIZE VALUE="64 GiB"/>'
+                     f'<OPERATING_FREQUENCY VALUE="1333 MHz"/>'
+                     f'<OPERATING_VOLTAGE VALUE="1.35 V"/>'
+                     f'<MEMORY_STATUS VALUE="OK"/></CPU{c}>')
+    parts.append("</MEMORY_DETAILS_SUMMARY></MEMORY>")
+    # storage (Smart Array P220i)
+    parts.append('<STORAGE><CONTROLLER>'
+                 '<LABEL>Controller on System Board, Smart Array P220i Controller</LABEL>'
+                 '<MODEL>P220i</MODEL><SERIALNUMBER>PTUSA0BRH2CBZT</SERIALNUMBER>'
+                 '<CACHE_MODULE_STATUS VALUE="OK"/><CONTROLLER_STATUS VALUE="OK">OK</CONTROLLER_STATUS>'
+                 '<DRIVE_ENCLOSURES><ENCLOSURE><STATUS VALUE="OK"/></ENCLOSURE></DRIVE_ENCLOSURES>'
+                 '<LOGICAL_DRIVES><LOGICAL_DRIVE>'
+                 '<CAPACITY VALUE="279 GiB"/><FAULT_TOLERANCE VALUE="RAID 1/RAID 1+0"/>'
+                 '<LOGICAL_DRIVE_STATUS VALUE="OK"/>'
+                 '<PHYSICAL_DRIVES>'
+                 '<PHYSICAL_DRIVE><MODEL>EG0300FCSPH</MODEL>'
+                 '<CAPACITY VALUE="279 GiB"/><LOCATION>Port 1I Box 1 Bay 1</LOCATION>'
+                 '<STATUS VALUE="OK"/></PHYSICAL_DRIVE>'
+                 '<PHYSICAL_DRIVE><MODEL>EG0300FCSPH</MODEL>'
+                 '<CAPACITY VALUE="279 GiB"/><LOCATION>Port 1I Box 1 Bay 2</LOCATION>'
+                 '<STATUS VALUE="OK"/></PHYSICAL_DRIVE>'
+                 '</PHYSICAL_DRIVES>'
+                 '</LOGICAL_DRIVE></LOGICAL_DRIVES></CONTROLLER></STORAGE>')
+    # nic information (iLO4 путь)
+    parts.append("<NIC_INFORMATION>")
+    parts.append(f'<NIC><LABEL>Nic Port 1</LABEL><STATUS VALUE="Link Up"/>'
+                 f'<IP_ADDRESS>10.0.0.{idx}</IP_ADDRESS>'
+                 '<SPEED VALUE="1000" UNIT="Mbps"/><LINK>Full Duplex</LINK></NIC>')
+    parts.append('<NIC><LABEL>Nic Port 2</LABEL><STATUS VALUE="Link Down"/>'
+                 '<IP_ADDRESS>0.0.0.0</IP_ADDRESS>'
+                 '<SPEED VALUE="Unknown" UNIT="Mbps"/><LINK>Unknown</LINK></NIC>')
+    parts.append("</NIC_INFORMATION>")
+    parts.append("</GET_EMBEDDED_HEALTH_DATA>")
+    parts.append('<RIBCL_INFO><RIBCL_MESSAGE level="low">Logged in successfully</RIBCL_MESSAGE></RIBCL_INFO>')
+    parts.append("</RIBCL>")
+    return "\r\n".join(parts)
+
+
+def _ribcl_message(status_hex: str, message: str) -> str:
+    """Одиночное RIBCL-сообщение с RESPONSE (как настоящая прошивка).
+
+    level='low' + 'logged in successfully' игнорируется библиотекой hpilo
+    (фильтр в _parse_message), поэтому LOGIN-успех не «съедает» payload."""
+    return ('<?xml version="1.0"?>\r\n<RIBCL VERSION="2.23">\r\n'
+            f'<RESPONSE STATUS="{status_hex}" MESSAGE="{message}"'
+            ' VER_ERR="0"/><RIBCL_INFO>\r\n'
+            '<RIBCL_MESSAGE level="low">Mock iLO: request processed</RIBCL_MESSAGE>'
+            '</RIBCL_INFO>\r\n</RIBCL>')
+
+
+def _ribcl_response(raw: bytes, login_ok: bool = True) -> tuple[int, str]:
+    """Разбор RIBCL-запроса от python-hpilo (hpilo-exporter) и нашего
+    ribcl-коллектора -> (http_code, xml_body).
+
+    Важно (проверено по исходникам python-hpilo 4.x):
+      * библиотека шлёт `POST /ribcl HTTP/1.1` СЫРЫМИ байтами поверх TLS;
+      * ждёт ответ, начинающийся ровно с "HTTP/1.1 200" (иначе — ошибка);
+      * пустой запрос <RIBCL/> (протокольная детекция) должен вернуть
+        RESPONSE STATUS=0x400 'syntax error' — иначе hpilo переключится
+        на RAW-протокол и дальше всё сломается;
+      * тело ответа может содержать НЕСКОЛЬКО XML-сообщений подряд
+        (каждое со своим <?xml ...?>) — библиотека режет их по '<?xml'.
+    login_ok=False эмулирует неверную учётку -> IloLoginFailed (0x005f)."""
+    text = raw.decode("utf-8", "replace")
+    p = _profile()
+
+    # --- протокольная детекция (python-hpilo._detect_protocol) ---
+    # Библиотека определяет, HTTP-это-iLO или RAW-порт, по наличию заголовка
+    # "HTTP/1.1" в начале ОТВЕТА. Настоящий iLO4 всегда отвечает как HTTP-сервер
+    # (в т.ч. синтаксической ошибкой на мусор), поэтому эмулируем то же:
+    # запрос без RIBCL-корня -> RESPONSE 0x400 'syntax error', но всё равно
+    # с полным HTTP-префиксом (пишется в _serve_raw_ribcl/do_POST).
+    if "<RIBCL" not in text.upper():
+        return 200, _ribcl_message("0x00000400", "Request contained a syntax error.")
+
+    # --- аутентификация ---
+    if not login_ok:
+        return 200, _ribcl_message("0x0000005f", "Login failed")
+
+    parts: list[str] = []
+    up = text.upper()
+
+    # ВАЖНО: python-hpilo шлёт тег <GET_EMBEDDED_HEALTH/> (БЕЗ суффикса _DATA),
+    # поэтому матчить надо по "GET_EMBEDDED_HEALTH" — старый паттерн
+    # "GET_EMBEDDED_HEALTH_DATA" никогда не совпадал, mock молчал, и hpilo
+    # падал с "Expected tag 'GET_EMBEDDED_HEALTH_DATA' not found".
+    if "GET_EMBEDDED_HEALTH" in up:
+        parts.append(_ribcl_embedded_health(p))
+    if "GET_PRODUCT_NAME" in up:
+        parts.append('<?xml version="1.0"?>\r\n<RIBCL VERSION="2.23">\r\n'
+                     '<SERVER_INFO VALUE="0"><GET_PRODUCT_NAME VALUE="%s"/>'
+                     '</SERVER_INFO>\r\n</RIBCL>' % p["model"])
+    # ВАЖНО: python-hpilo ищет в ответе ТЕГ РЕЗУЛЬТАТА, а не тег запроса:
+    # get_server_name -> SERVER_NAME, get_host_power_status -> GET_HOST_POWER
+    # (см. _info_tag(returntags) в hpilo.py). Настоящий iLO4 отвечает именно так.
+    if "GET_SERVER_NAME" in up:
+        parts.append('<?xml version="1.0"?>\r\n<RIBCL VERSION="2.23">\r\n'
+                     '<SERVER_INFO VALUE="0"><SERVER_NAME VALUE="%s"/>'
+                     '</SERVER_INFO>\r\n</RIBCL>' % (p["host"] or "mock-dl380g8-01"))
+    if "GET_HOST_POWER_STATUS" in up:
+        parts.append('<?xml version="1.0"?>\r\n<RIBCL VERSION="2.23">\r\n'
+                     '<SERVER_INFO VALUE="0"><GET_HOST_POWER HOST_POWER="true"/>'
+                     '</SERVER_INFO>\r\n</RIBCL>')
+    if "GET_FW_VERSION" in up or "GET_ALL_FIRMWARE_VERSIONS" in up:
+        parts.append('<?xml version="1.0"?>\r\n<RIBCL VERSION="2.23">\r\n'
+                     '<RIB_INFO><GET_FW_VERSION MANAGEMENT_PROCESSOR="iLO4"'
+                     ' FIRMWARE_VERSION="2.82" BOOT_CODE="1.61"'
+                     ' FPGA_IMAGE_VERSION="1.07" UEFI_STORED_VERSION="2.50"/>'
+                     '</RIB_INFO>\r\n</RIBCL>')
+    if "GET_IML" in up or "GET_IML_HEADER" in up:
+        # текстовый дамп IML — для нашего ribcl-коллектора (парсит plain-text)
+        iml = "\n".join(
+            f"{i:05d} | 09/29/26 | {12 + i}:00:00 | {e['Message']} |"
+            for i, e in enumerate(LOG_ENTRIES, 1))
+        parts.append('<RIBCL VERSION="2.23">\n<RIB_INFO>\n<GET_IML>\n'
+                     + iml + '\n</GET_IML>\n</RIB_INFO>\n</RIBCL>\n')
+
+    if not parts:  # неизвестный запрос с валидным LOGIN — просто успех
+        return 200, _ribcl_message("0x00000000", "No error")
+    return 200, "\r\n".join(parts)
+
+
 class Handler(BaseHTTPRequestHandler):
+    # IMPORTANT: python-hpilo пишет «сырой» запрос (заголовки + тело XML слитно,
+    # без пустой строки-терминатора). При protocol_version == HTTP/1.1 BaseHTTP-
+    # ServerReader ждёт терминатор и read() до EOF впадает во взаимный deadlock с
+    # клиентом. С HTTP/1.0 стандартный парсер читает ровно Content-Length байт —
+    # этот же путь используют и обычные запросы (requests/hpilo ILO_HTTP).
+    protocol_version = "HTTP/1.0"
+
     def log_message(self, fmt, *args):
         pass
 
@@ -248,6 +459,90 @@ class Handler(BaseHTTPRequestHandler):
         return self._json({"error": {"code": "ResourceMissing",
                                      "message": f"no such resource {p}"}}, 404)
 
+    def handle_one_request(self):  # noqa: N802
+        """Перехват «сырого» RIBCL поверх TLS.
+
+        python-hpilo пишет в сокет байты `POST /ribcl HTTP/1.1\\r\\n...` без
+        обязательного пустого терминального строки \\r\\n\\r\\n перед телом XML.
+        Стандартный http.client-парсер запроса в этом случае не может отделить
+        заголовки от тела (нет терминатора) и зависает/ошибается. Поэтому,
+        если первая строка похожа на POST /ribcl, читаем всё соединение целиком
+        (клиент шлёт один запрос и ждёт ответа; Connection: Close) и отдаём
+        сырой ответ сами. Все остальные запросы — обычным путём."""
+        try:
+            self.raw_requestline = self.rfile.readline(65537)
+            if not self.raw_requestline:
+                self.close_connection = True
+                return
+            line = self.raw_requestline.decode("latin-1")
+            if line.upper().startswith("POST /RIBCL"):
+                # python-hpilo шлёт "POST /ribcl HTTP/1.1\r\nHost:...\r\n
+                # Content-Length: N\r\nConnection: Close\r\n" и СРАЗУ тело XML —
+                # без пустой терминальной строки. Поэтому читаем заголовки построчно
+                # (readline не блокируется отсутствием терминатора), затем ровно
+                # Content-Length байт тела. Гадать на read() до EOF нельзя: hpilo
+                # после отправки ничего не пишет и ждёт ответ -> взаимный deadlock.
+                length = 0
+                while True:
+                    hl = self.rfile.readline(65537)
+                    if not hl or hl in (b"\r\n", b"\n"):
+                        break
+                    k, _, v = hl.decode("latin-1").partition(":")
+                    if k.strip().lower() == "content-length":
+                        try:
+                            length = int(v.strip())
+                        except ValueError:
+                            length = 0
+                body = self.rfile.read(length) if length else b""
+                self._serve_raw_ribcl(line, body)
+                self.close_connection = True
+                return
+            if self.parse_request():
+                mname = "do_" + self.command
+                method = getattr(self, mname, None)
+                if method is None:
+                    self.send_error(405, f"Unsupported method ({self.command!r})")
+                else:
+                    method()
+                self.wfile.flush()
+        except TimeoutError:
+            self.log_error("Request timed out")
+            self.close_connection = True
+
+    def _serve_raw_ribcl(self, request_line: str, body: bytes) -> None:
+        """Ответ на сырой RIBCL-запрос от python-hpilo: заголовки пишем вручную,
+        ровно 'HTTP/1.1 200 OK\\r\\n...\\r\\n\\r\\n' + XML (библиотека требует
+        именно такой префикс)."""
+        # профиль сервера: python-hpilo шлёт HTTP-заголовок Host: localhost,
+        # поэтому имя цели берём из SNI TLS-handshake (hpilo-exporter указывает
+        # server_hostname=<имя цели>); если SNI нет — fallback на заголовок Host.
+        sni = getattr(self.connection, "server_hostname", None) or ""
+        if not sni or sni == "localhost":
+            # headers ещё не распарсены (сырой путь) — Host ищем в байтах запроса
+            mhost = re.search(rb"\r\nHost:\s*([^\r\n]+)", body, re.I)
+            sni = mhost.group(1).decode("latin-1") if mhost else ""
+        _handler_local.srv = type("S", (), {"host": sni or "mock-dl380g8-01"})()
+        login_ok = True
+        # проверка учётки: USER_LOGIN из <LOGIN ...>; mock принимает monitor/secret
+        import re as _re
+        m = _re.search(r'USER_LOGIN="([^"]*)"', body.decode("utf-8", "replace"))
+        expected_user = os.environ.get("MOCK_ILO_USER", "monitor")
+        if m and m.group(1) != expected_user:
+            login_ok = False
+        code, xml = _ribcl_response(body, login_ok=login_ok)
+        status = "OK" if code == 200 else "Unauthorized"
+        # ВАЖНО: python-hpilo при разборе HTTP-ответа безусловно читает
+        # заголовок 'transfer-encoding' (KeyError, если его нет). Настоящий iLO4
+        # отвечает chunked — эмулируем ровно так же.
+        payload = xml.encode()
+        chunks = hex(len(payload))[2:].encode() + b"\r\n" + payload + b"\r\n0\r\n\r\n"
+        resp = (f"HTTP/1.1 {code} {status}\r\n"
+                "Content-Type: text/ribcl\r\n"
+                "Transfer-Encoding: chunked\r\n"
+                "Connection: close\r\n\r\n").encode() + chunks
+        self.wfile.write(resp)
+        self.wfile.flush()
+
     def do_POST(self):  # noqa: N802
         p = self.path.rstrip("/")
         length = int(self.headers.get("Content-Length", 0) or 0)
@@ -268,16 +563,40 @@ class Handler(BaseHTTPRequestHandler):
                                          "UserName": creds.get("UserName", "mock")}).encode())
             return
         if p == "/ribcl":
-            iml = "\n".join(
-                f"{i:05d} | 09/29/26 | {12 + i}:00:00 | {e['Message']} |"
-                for i, e in enumerate(LOG_ENTRIES, 1))
-            body = ('<RIBCL VERSION="2.23">\n<RIB_INFO>\n<GET_IML>\n'
-                    + iml + '\n</GET_IML>\n</RIB_INFO>\n</RIBCL>\n').encode()
-            self.send_response(200)
+            # Хорошо сформированный HTTP POST /ribcl. Два клиента:
+            #  * наш ribcl-коллектор (requests) — profile берётся из заголовка Host;
+            #  * python-hpilo (ILO_HTTP): пишет заголовки и тело XML ДВУМЯ отдельными
+            #    TCP-пакетами (см. hpilo._communicate). BaseHTTPRequestHandler c
+            #    protocol_version="HTTP/1.0" читает Content-Length байт сразу после
+            #    пустой строки заголовков; если второй пакет ещё не пришёл — читаем
+            #    недостающее из rfile дополнительно (с таймаутом сервера).
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if len(raw) < length:
+                try:
+                    raw += self.rfile.read(length - len(raw))
+                except Exception:
+                    pass
+        if p == "/ribcl":
+            sni = getattr(self.connection, "server_hostname", None) or ""
+            host = sni or self.headers.get("Host", "")
+            if not host or host.startswith("localhost"):
+                mh = re.search(rb"\r?\nHost:\s*([^\r\n]+)", raw, re.I)
+                if mh:
+                    host = mh.group(1).decode("latin-1")
+            _handler_local.srv = type("S", (), {"host": host or "mock-dl380g8-01"})()
+            login_ok = True
+            muser = re.search(rb'USER_LOGIN="([^"]*)"', raw)
+            expected_user = os.environ.get("MOCK_ILO_USER", "monitor")
+            if muser and muser.group(1).decode("latin-1") != expected_user:
+                login_ok = False
+            code, xml = _ribcl_response(raw, login_ok=login_ok)
+            body = xml.encode()
+            self.send_response(code)
             self.send_header("Content-Type", "text/ribcl")
-            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Transfer-Encoding", "chunked")
             self.end_headers()
-            return self.wfile.write(body)
+            self.wfile.write(hex(len(body))[2:].encode() + b"\r\n" + body + b"\r\n0\r\n\r\n")
+            return
         return self._json({"error": "unsupported"}, 404)
 
     def do_DELETE(self):  # noqa: N802
