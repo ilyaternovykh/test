@@ -71,6 +71,34 @@ services:
     depends_on:
       - mock-ilo
 
+  # ---------- idrac_exporter (github.com/mrlhansen/idrac_exporter) ----------
+  # Redfish-экспортёр (Dell iDRAC, HPE iLO5+, Lenovo XClarity, Supermicro).
+  # On-demand proxy-скрейп: GET /metrics?target=<IP/DNS BMC>. Цели и креды —
+  # из ЕДИНОГО inventory.ini: ./scripts/gen-targets.sh генерирует
+  #   targets/idrac-config.yml   (hosts + креды, монтируется в /etc/prometheus/idrac.yml)
+  #   targets/idrac-targets.json (file_sd для Prometheus, job idrac)
+  # Креды per-host совпадают с ?target= (ключ hosts в конфиге = хост из URL),
+  # fallback — default из ENV IDRAC_DEFAULT_USERNAME/PASSWORD.
+  # --config-watch в ENTRYPOINT подхватывает перегенерацию конфига без рестарта.
+  # Экспортёр рассчитан на РЕАЛЬНЫЕ iDRAC/BMC (полный Redfish: system, sensors,
+  # power, processors, memory, storage, events — все включены в конфиге).
+  idrac-exporter:
+    build:
+      context: ./docker/idrac-exporter
+    image: ilo-monitor/idrac-exporter:local
+    container_name: idrac-exporter
+    restart: unless-stopped
+    environment:
+      # ENV-подстановка ${VAR} в idrac-config.yml (--config-expand-env);
+      # задаём те же дефолты monitor/secret, что у ilo/hpilo, иначе expand
+      # дал бы пустые креды и Validate() отверг бы конфиг
+      IDRAC_DEFAULT_USERNAME: ${IDRAC_USER:-${ILO_USER:-monitor}}
+      IDRAC_DEFAULT_PASSWORD: ${IDRAC_PASS:-${ILO_PASS:-secret}}
+    ports:
+      - "9348:9348"
+    volumes:
+      - ./targets/idrac-config.yml:/etc/prometheus/idrac.yml:ro
+
   # ---------- хранение ----------
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -100,6 +128,7 @@ services:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./docker/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - ./targets/hpilo-targets.json:/etc/prometheus/targets/hpilo-targets.json:ro
+      - ./targets/idrac-targets.json:/etc/prometheus/targets/idrac-targets.json:ro
       - prometheus-data:/prometheus
 
   alertmanager:

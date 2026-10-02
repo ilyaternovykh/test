@@ -111,6 +111,36 @@ scrape_configs:
       - target_label: __address__
         replacement: hpilo-exporter:9416
 
+  # ---------- idrac_exporter (github.com/mrlhansen/idrac_exporter) ----------
+  # Redfish on-demand proxy-скрейп: Prometheus дергает
+  #   GET http://idrac-exporter:9348/metrics?target=<хост:порт BMC>
+  # для каждой цели из file_sd (targets/idrac-targets.json, генерируется из
+  # единого inventory.ini скриптом ./scripts/gen-targets.sh).
+  # Креды экспортёр берёт из своего конфига (hosts по совпадению с ?target=),
+  # поэтому пароли в URL скрейпа НЕ попадают.
+  - job_name: idrac
+    metrics_path: /metrics
+    scrape_interval: 120s            # полный Redfish (storage/events) тяжёлый
+    scrape_timeout: 60s
+    honor_labels: true               # server/target_name/name из file_sd важнее instance
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/idrac-targets.json
+        refresh_interval: 60s
+    relabel_configs:
+      # Порядок правил важен (см. комментарий к job hpilo): сначала извлекаем
+      # хост/порт из ИСХОДНОГО __address__, подменяем адрес только в конце.
+      # 1) "хост" или "хост:порт" -> ?target=<хост:порт> целиком (idrac_exporter
+      #    сам разбирает порт через net.SplitHostPort; без порта использует 443)
+      - source_labels: [__address__]
+        target_label: __param_target
+      # 2) имя цели сохраняем в instance ДО подмены адреса
+      - source_labels: [server]
+        target_label: instance
+      # 3) перенаправляем запрос на сам экспортёр
+      - target_label: __address__
+        replacement: idrac-exporter:9348
+
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]

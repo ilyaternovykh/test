@@ -2,10 +2,12 @@
 # -*- coding: utf-8 -*-
 """Генератор конфигов мониторинга из ЕДИНОГО инвентаря targets/inventory.ini.
 
-Один файл с IP и именами серверов -> три потребителя:
+Один файл с IP и именами серверов -> четыре потребителя:
   1. targets/targets.yaml         — конфиг нашего ilo-exporter;
   2. targets/hpilo-targets.json   — file_sd для Prometheus (hpilo-exporter);
-  3. docker/prometheus/prometheus.yml — перечитать file_sd не нужно, он сам подхватит.
+  3. targets/idrac-config.yml     — конфиг idrac_exporter (хосты+креды) +
+     targets/idrac-targets.json   — file_sd для Prometheus (job idrac);
+  4. docker/prometheus/prometheus.yml — перечитать file_sd не нужно, он сам подхватит.
 
 Использование:
     ./scripts/gen-targets.sh                 # из targets/inventory.ini
@@ -180,6 +182,100 @@ def gen_hpilo_json(defaults: dict, servers: list[dict]) -> str:
     return json.dumps(out, indent=2, ensure_ascii=False) + "\n"
 
 
+def gen_idrac_config(defaults: dict, servers: list[dict]) -> str:
+    """Конфиг для idrac_exporter (github.com/mrlhansen/idrac_exporter).
+
+    idrac_exporter — Redfish-экспортёр с on-demand-скрейпом:
+      GET http://idrac-exporter:9348/metrics?target=<IP или DNS BMC>
+    Креды он берёт из секции hosts по СОВПАДЕНИЮ ключа с параметром ?target=
+    (в приоритете над ENV), поэтому в инвентаре достаточно одного адреса.
+    Экспортёр работает с РЕАЛЬНЫМИ BMC по Redfish/HTTPS; ключ hosts — хост без
+    порта (net.SplitHostPort вырезает порт из ?target= перед поиском), схема и
+    порт берутся из URL inventory (https, 443 по умолчанию для прода).
+
+    Секреты: общий default-логин через ${IDRAC_DEFAULT_USERNAME}/... (ENV
+    контейнера, см. docker-compose.yml); per-server override (user/pass из
+    inventory) пишется в конфиг ОТКРЫТЫМ ТЕКСТОМ — файл монтируется только
+    внутрь контейнера экспортёра и не коммитится (.gitignore: targets/idrac-*).
+
+    Флаг --config-expand-env включает подстановку ${VAR} (compose передаёт
+    его в argv). Если ENV IDRAC_DEFAULT_USERNAME/IDRAC_DEFAULT_PASSWORD не
+    заданы, подстановка даёт пустые строки — поэтому в compose задаём их с теми
+    же дефолтами monitor/secret, что у остальных экспортёров (Validate()
+    отвергает конфиг с пустым паролем default-хоста).
+    """
+    lines = [
+        "# СГЕНЕРИРОВАНО scripts/gen-targets.sh из targets/inventory.ini — не редактируйте вручную!",
+        "# Конфиг idrac_exporter: https://github.com/mrlhansen/idrac_exporter",
+        "address: 0.0.0.0",
+        "port: 9348",
+        "timeout: 15",
+        "metrics_prefix: idrac",
+        "",
+        # Полная функциональность idrac_exporter: все доступные наборы метрик.
+        "hosts:",
+        "  # fallback-креды для целей без per-server user/pass в inventory.ini",
+        "  default:",
+        "    username: ${IDRAC_DEFAULT_USERNAME}",
+        "    password: ${IDRAC_DEFAULT_PASSWORD}",
+        "",
+        "  # per-host креды (ключ = точное значение параметра ?target=)",
+    ]
+    for s in servers:
+        hostport = s["url"].split("//", 1)[-1].rstrip("/")
+        host = hostport.split(":", 1)[0]
+        if s["user"] or s["pass"]:
+            lines.append(f"  {host}:")
+            lines.append(f"    username: {s['user'] or '${IDRAC_DEFAULT_USERNAME}'}")
+            lines.append(f"    password: {s['pass'] or '${IDRAC_DEFAULT_PASSWORD}'}")
+        # scheme/port не пишем: адрес цели приходит в ?target= уже с портом
+    lines += [
+        "",
+        "metrics:",
+        "  system: true",
+        "  sensors: true",
+        "  power: true",
+        "  processors: true",
+        "  memory: true",
+        "  storage: true",
+        "  events: true",
+        "",
+        "events:",
+        "  severity: warning",
+        "  maxage: 7d",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def gen_idrac_targets_json(defaults: dict, servers: list[dict]) -> str:
+    """file_sd для job idrac (Prometheus -> idrac_exporter proxy-скрейп).
+
+    Как и у hpilo: в targets[] — РЕАЛЬНЫЙ адрес BMC "хост:порт" (он же
+    подставляется в ?target= relabel_configs'ами), отображаемое имя сервера —
+    в labels. Поле "params" в file_sd запрещено форматом (см. gen_hpilo_json).
+    Метки server/target/name/... совпадают с другими экспортёрами — переменная
+    $server и алерты работают по всему парку.
+    """
+    out = []
+    for s in servers:
+        hostport = s["url"].split("//", 1)[-1].rstrip("/")
+        if ":" not in hostport:
+            hostport += ":443"
+        out.append({
+            "targets": [hostport],          # адрес ПОДКЛЮЧЕНИЯ -> ?target=
+            "labels": {
+                "server": s["name"],
+                "target_name": s["name"],   # отдельная метка: job idrac сам
+                "name": s["name"],          # ставит target=<адрес> (honor_labels)
+                "idrac_addr": hostport,     # фактический адрес BMC (debug)
+                "rack": s["rack"],
+                "model": s["model"],
+                "site": s["site"],
+            },
+        })
+    return json.dumps(out, indent=2, ensure_ascii=False) + "\n"
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("-i", "--inventory", default=os.path.join(REPO, "targets", "inventory.ini"))
@@ -192,9 +288,13 @@ def main(argv=None) -> int:
 
     yaml_path = os.path.join(REPO, "targets", "targets.yaml")
     json_path = os.path.join(REPO, "targets", "hpilo-targets.json")
+    idrac_cfg_path = os.path.join(REPO, "targets", "idrac-config.yml")
+    idrac_sd_path = os.path.join(REPO, "targets", "idrac-targets.json")
 
     body_yaml = gen_exporter_yaml(defaults, servers)
     body_json = gen_hpilo_json(defaults, servers)
+    body_idrac_cfg = gen_idrac_config(defaults, servers)
+    body_idrac_sd = gen_idrac_targets_json(defaults, servers)
 
     if args.check:
         print(f"OK: {len(servers)} servers; exporters config valid")
@@ -204,8 +304,14 @@ def main(argv=None) -> int:
         fh.write(body_yaml)
     with open(json_path, "w", encoding="utf-8") as fh:
         fh.write(body_json)
+    with open(idrac_cfg_path, "w", encoding="utf-8") as fh:
+        fh.write(body_idrac_cfg)
+    with open(idrac_sd_path, "w", encoding="utf-8") as fh:
+        fh.write(body_idrac_sd)
     print(f"wrote {yaml_path} ({len(servers)} targets)")
     print(f"wrote {json_path} ({len(servers)} file_sd groups)")
+    print(f"wrote {idrac_cfg_path} ({len(servers)} hosts)")
+    print(f"wrote {idrac_sd_path} ({len(servers)} file_sd groups)")
     return 0
 
 
